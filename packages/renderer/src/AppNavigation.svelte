@@ -1,9 +1,11 @@
 <svelte:options runes={true} />
 
 <script lang="ts">
+import { Tooltip } from '@podman-desktop/ui-svelte';
 import { onMount } from 'svelte';
 import type { TinroRouteMeta } from 'tinro';
 
+import AuthActions from './lib/authentication/AuthActions.svelte';
 import { CommandRegistry } from './lib/CommandRegistry';
 import NewContentOnDashboardBadge from './lib/dashboard/NewContentOnDashboardBadge.svelte';
 import AccountIcon from './lib/images/AccountIcon.svelte';
@@ -13,8 +15,6 @@ import NavItem from './lib/ui/NavItem.svelte';
 import NavRegistryEntry from './lib/ui/NavRegistryEntry.svelte';
 import NavSection from './lib/ui/NavSection.svelte';
 import { navigationRegistry } from './stores/navigation/navigation-registry';
-import { Tooltip } from '@podman-desktop/ui-svelte';
-import AuthActions from './lib/authentication/AuthActions.svelte';
 
 let {
   exitSettingsCallback,
