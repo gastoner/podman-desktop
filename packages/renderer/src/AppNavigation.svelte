@@ -19,16 +19,15 @@ import { navigationRegistry } from './stores/navigation/navigation-registry';
 let {
   exitSettingsCallback,
   meta = $bindable(),
-  authActions = $bindable(),
-  outsideWindow = $bindable(),
 }: {
   exitSettingsCallback: () => void;
   meta: TinroRouteMeta;
-  authActions: AuthActions;
-  outsideWindow: HTMLDivElement;
 } = $props();
 
 const iconSize = '22';
+
+let authActions = $state<AuthActions>();
+let outsideWindow = $state<HTMLDivElement>();
 
 onMount(async () => {
   const commandRegistry = new CommandRegistry();
@@ -84,7 +83,7 @@ function clickSettings(b: boolean) {
   <div class="grow"></div>
 
   <div bind:this={outsideWindow}>
-    <NavItem href="/accounts" tooltip="" bind:meta={meta} onClick={event => authActions.onButtonClick(event)}>
+    <NavItem href="/accounts" tooltip="" bind:meta={meta} onClick={event => authActions?.onButtonClick(event)}>
       <Tooltip bottomRight tip="Accounts">
         <AccountIcon size={iconSize} />
       </Tooltip>
