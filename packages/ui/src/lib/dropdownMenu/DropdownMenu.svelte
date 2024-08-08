@@ -1,5 +1,5 @@
 <script lang="ts">
-import type { IconDefinition } from '@fortawesome/free-solid-svg-icons';
+import { type IconDefinition } from '@fortawesome/free-solid-svg-icons';
 import { faEllipsisVertical } from '@fortawesome/free-solid-svg-icons';
 import Fa from 'svelte-fa';
 
@@ -10,6 +10,10 @@ export let icon: IconDefinition = faEllipsisVertical;
 export let shownAsMenuActionItem = false;
 export let hidden = false;
 export let title = '';
+
+let classes =
+  $$props.class ??
+  `text-[var(--pd-action-button-text)] hover:text-[var(--pd-action-button-hover-text)] font-medium rounded-md inline-flex items-center px-2 py-2 text-center ${shownAsMenuActionItem ? 'bg-[var(--pd-action-button-details-bg)] px-3' : 'hover:bg-[var(--pd-action-button-details-bg)]'}`;
 
 // Show and hide the menu using clickOutside
 let showMenu = false;
@@ -58,10 +62,10 @@ function onButtonClick(e: MouseEvent): void {
       on:click={onButtonClick}
       title={title}
       bind:this={outsideWindow}
-      class="text-[var(--pd-action-button-text)] {shownAsMenuActionItem
-        ? 'bg-[var(--pd-action-button-details-bg)] px-3'
-        : 'hover:bg-[var(--pd-action-button-details-bg)]'} hover:text-[var(--pd-action-button-hover-text)] font-medium rounded-md inline-flex items-center px-2 py-2 text-center">
-      <Fa class="h-4 w-4" icon={icon} />
+      class={classes}>
+      <slot name="icon">
+        <Fa class="h-4 w-4" icon={icon} />
+      </slot>
     </button>
 
     <!-- Dropdown menu for all other actions -->

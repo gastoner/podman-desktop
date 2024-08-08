@@ -1,14 +1,12 @@
 <svelte:options runes={true} />
 
 <script lang="ts">
-import { Tooltip } from '@podman-desktop/ui-svelte';
 import { onMount } from 'svelte';
 import type { TinroRouteMeta } from 'tinro';
 
 import AuthActions from './lib/authentication/AuthActions.svelte';
 import { CommandRegistry } from './lib/CommandRegistry';
 import NewContentOnDashboardBadge from './lib/dashboard/NewContentOnDashboardBadge.svelte';
-import AccountIcon from './lib/images/AccountIcon.svelte';
 import DashboardIcon from './lib/images/DashboardIcon.svelte';
 import SettingsIcon from './lib/images/SettingsIcon.svelte';
 import NavItem from './lib/ui/NavItem.svelte';
@@ -25,9 +23,6 @@ let {
 } = $props();
 
 const iconSize = '22';
-
-let authActions = $state<AuthActions>();
-let outsideWindow = $state<HTMLDivElement>();
 
 onMount(async () => {
   const commandRegistry = new CommandRegistry();
@@ -82,14 +77,9 @@ function clickSettings(b: boolean) {
 
   <div class="grow"></div>
 
-  <div bind:this={outsideWindow}>
-    <NavItem href="/accounts" tooltip="" bind:meta={meta} onClick={event => authActions?.onButtonClick(event)}>
-      <Tooltip bottomRight tip="Accounts">
-        <AccountIcon size={iconSize} />
-      </Tooltip>
-      <AuthActions bind:this={authActions} outsideWindow={outsideWindow} />
-    </NavItem>
-  </div>
+  <NavItem href="/accounts" tooltip="" bind:meta={meta} onClick={() => {}}>
+    <AuthActions iconSize={iconSize} />
+  </NavItem>
 
   <NavItem
     href="/preferences"
