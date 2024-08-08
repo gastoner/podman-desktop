@@ -3,13 +3,21 @@ import type { IconDefinition } from '@fortawesome/free-solid-svg-icons';
 import { faEllipsisVertical } from '@fortawesome/free-solid-svg-icons';
 import Fa from 'svelte-fa';
 
-import DropDownMenuItems from './DropDownMenuItems.svelte';
+import { DropdownMenu } from '..';
 
 export let onBeforeToggle = (): void => {};
 export let icon: IconDefinition = faEllipsisVertical;
 export let shownAsMenuActionItem = false;
 export let hidden = false;
 export let title = '';
+export let inNavItem: boolean = false;
+
+const defaultDropdownMenuClass =
+  'text-[var(--pd-action-button-text)] font-medium rounded-md inline-flex items-center px-2 py-2 text-center';
+const menuActionItemClass = defaultDropdownMenuClass + ' bg-[var(--pd-action-button-details-bg)] px-3';
+const notMenuActionItemClass =
+  defaultDropdownMenuClass +
+  ' hover:bg-[var(--pd-action-button-details-bg)] hover:text-[var(--pd-action-button-hover-text)]';
 
 // Show and hide the menu using clickOutside
 let showMenu = false;
@@ -38,7 +46,7 @@ function onWindowClick(e: any): void {
   if (!hidden) showMenu = outsideWindow.contains(e.target);
 }
 
-function onButtonClick(e: MouseEvent): void {
+export function onButtonClick(e: MouseEvent): void {
   // keep track of the cursor position
   clientY = e.clientY;
   clientX = e.clientX;
@@ -58,15 +66,13 @@ function onButtonClick(e: MouseEvent): void {
       on:click={onButtonClick}
       title={title}
       bind:this={outsideWindow}
-      class="text-[var(--pd-action-button-text)] {shownAsMenuActionItem
-        ? 'bg-[var(--pd-action-button-details-bg)] px-3'
-        : 'hover:bg-[var(--pd-action-button-details-bg)]'} hover:text-[var(--pd-action-button-hover-text)] font-medium rounded-md inline-flex items-center px-2 py-2 text-center">
-      <Fa class="h-4 w-4" icon={icon} />
+      class={inNavItem ? '' : shownAsMenuActionItem ? menuActionItemClass : notMenuActionItemClass}>
+      <slot name="icon"><Fa class="h-4 w-4" icon={icon} /></slot>
     </button>
 
     <!-- Dropdown menu for all other actions -->
     {#if showMenu}
-      <DropDownMenuItems clientY={clientY} clientX={clientX}><slot /></DropDownMenuItems>
+      <DropdownMenu.Items clientY={clientY} clientX={clientX}><slot /></DropdownMenu.Items>
     {/if}
   </div>
 {/if}

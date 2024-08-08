@@ -1,7 +1,7 @@
 <svelte:options runes={true} />
 
 <script lang="ts">
-import { Tooltip } from '@podman-desktop/ui-svelte';
+import { DropdownMenu, Tooltip } from '@podman-desktop/ui-svelte';
 import { onMount } from 'svelte';
 import type { TinroRouteMeta } from 'tinro';
 
@@ -26,8 +26,7 @@ let {
 
 const iconSize = '22';
 
-let authActions = $state<AuthActions>();
-let outsideWindow = $state<HTMLDivElement>();
+// let dropdownMenu = $state<DropdownMenu>();
 
 onMount(async () => {
   const commandRegistry = new CommandRegistry();
@@ -82,14 +81,16 @@ function clickSettings(b: boolean) {
 
   <div class="grow"></div>
 
-  <div bind:this={outsideWindow}>
-    <NavItem href="/accounts" tooltip="" bind:meta={meta} onClick={event => authActions?.onButtonClick(event)}>
-      <Tooltip bottomRight tip="Accounts">
-        <AccountIcon size={iconSize} />
-      </Tooltip>
-      <AuthActions bind:this={authActions} outsideWindow={outsideWindow} />
-    </NavItem>
-  </div>
+  <!-- <NavItem href="/accounts" tooltip="" bind:meta={meta} onClick={event => {dropdownMenu.onButtonClick(event)}}> -->
+  <NavItem href="/accounts" tooltip="" bind:meta={meta} onClick={() => {}}>
+    <Tooltip bottomRight tip="Accounts">
+      <!-- <DropdownMenu inNavItem={true} bind:this={dropdownMenu}> -->
+      <DropdownMenu inNavItem={true}>
+        <span slot="icon"><AccountIcon size={iconSize} /></span>
+        <AuthActions />
+      </DropdownMenu>
+    </Tooltip>
+  </NavItem>
 
   <NavItem
     href="/preferences"
