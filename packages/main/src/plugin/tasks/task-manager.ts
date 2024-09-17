@@ -41,27 +41,27 @@ export class TaskManager {
 
   public init(): void {
     // The TaskManager is responsible for creating the entry he will be using
-    this.setStatusBarEntry(false);
+    // this.setStatusBarEntry(false);
 
-    this.commandRegistry.registerCommand('show-task-manager', () => {
-      this.apiSender.send('toggle-task-manager', '');
-      this.setStatusBarEntry(false);
-    });
+    // this.commandRegistry.registerCommand('show-task-manager', () => {
+    //   this.apiSender.send('toggle-task-manager', '');
+    //   this.setStatusBarEntry(false);
+    // });
   }
 
   private setStatusBarEntry(highlight: boolean): void {
-    this.statusBarRegistry.setEntry(
-      'tasks',
-      false,
-      0,
-      undefined,
-      'Tasks',
-      'fa fa-bell',
-      true,
-      'show-task-manager',
-      undefined,
-      highlight,
-    );
+    // this.statusBarRegistry.setEntry(
+    //   'tasks',
+    //   false,
+    //   0,
+    //   undefined,
+    //   'Tasks',
+    //   'fa fa-bell',
+    //   true,
+    //   'show-task-task',
+    //   undefined,
+    //   highlight,
+    // );
   }
 
   public createNotificationTask(options: NotificationOptions): NotificationTask {

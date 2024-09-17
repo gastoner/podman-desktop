@@ -36,6 +36,7 @@ export interface NavigationParameters {
   [NavigationPage.VOLUMES]: never;
   [NavigationPage.VOLUME]: { name: string };
   [NavigationPage.CONTRIBUTION]: { name: string };
+  [NavigationPage.TASKS]: never;
   [NavigationPage.TROUBLESHOOTING]: never;
   [NavigationPage.HELP]: never;
   [NavigationPage.WEBVIEW]: { id: string };

@@ -96,6 +96,12 @@ export class NavigationManager {
     });
   }
 
+  async navigateToTasks(): Promise<void> {
+    this.navigateTo({
+      page: NavigationPage.TASKS,
+    });
+  }
+
   async navigateToHelp(): Promise<void> {
     this.navigateTo({
       page: NavigationPage.HELP,

@@ -69,6 +69,7 @@ import PreferencesNavigation from './PreferencesNavigation.svelte';
 import Route from './Route.svelte';
 import { navigationRegistry } from './stores/navigation/navigation-registry';
 import SubmenuNavigation from './SubmenuNavigation.svelte';
+import TaskPage from './lib/task-manager/TaskPage.svelte';
 
 router.mode.memory();
 
@@ -309,6 +310,9 @@ window.events?.receive('navigate', (navigationRequest: unknown) => {
         </Route>
         <Route path="/webviews/:id/*" breadcrumb="Webview" let:meta>
           <Webview id={meta.params.id} />
+        </Route>
+        <Route path="/tasks" breadcrumb="Tasks">
+          <TaskPage />
         </Route>
         <Route path="/help" breadcrumb="Help">
           <HelpPage />

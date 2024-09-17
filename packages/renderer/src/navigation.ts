@@ -86,6 +86,9 @@ export const handleNavigation = (request: InferredNavigationRequest<NavigationPa
     case NavigationPage.CONTRIBUTION:
       router.goto(`/contribs/${request.parameters.name}/`);
       break;
+    case NavigationPage.TASKS:
+      router.goto('/tasks');
+      break;
     case NavigationPage.TROUBLESHOOTING:
       router.goto('/troubleshooting/repair-connections');
       break;

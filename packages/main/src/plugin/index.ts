@@ -538,6 +538,8 @@ export class PluginSystem {
     });
 
     statusBarRegistry.setEntry('help', false, -1, undefined, 'Help', 'fa fa-question-circle', true, 'help', undefined);
+    
+    statusBarRegistry.setEntry('tasks', false, -1, undefined, 'Tasks', 'fa fa-question-circle', true, 'tasks', undefined);
 
     statusBarRegistry.setEntry(
       'troubleshooting',
@@ -568,6 +570,10 @@ export class PluginSystem {
 
     commandRegistry.registerCommand('feedback', () => {
       apiSender.send('display-feedback', '');
+    });
+
+    commandRegistry.registerCommand('tasks', () => {
+      return navigationManager.navigateToTasks();
     });
 
     commandRegistry.registerCommand('help', () => {

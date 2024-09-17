@@ -32,6 +32,7 @@ export enum NavigationPage {
   VOLUMES = 'volumes',
   VOLUME = 'volume',
   CONTRIBUTION = 'contribution',
+  TASKS = 'tasks',
   TROUBLESHOOTING = 'troubleshooting',
   HELP = 'help',
   CLI_TOOLS = 'preferences-cli-tools',
