@@ -52,9 +52,14 @@ import {
 } from '@kubernetes/client-node';
 
 import type { KubeContext } from '/@api/kubernetes-context.js';
+import type { CheckingState, ContextGeneralState, ResourceName } from '/@api/kubernetes-contexts-states.js';
+import { secondaryResources } from '/@api/kubernetes-contexts-states.js';
 import type { V1Route } from '/@api/openshift-types.js';
 
 import type { ApiSenderType } from '../api.js';
+import { Backoff } from './backoff.js';
+import type { ContextInternalState, ContextState } from './contexts-states.js';
+import { ContextsStates, isSecondaryResourceName } from './contexts-states.js';
 import {
   backoffInitialValue,
   backoffJitter,
@@ -62,66 +67,11 @@ import {
   connectTimeout,
   dispatchTimeout,
 } from './kubernetes-context-state-constants.js';
+import { ResourceWatchersRegistry } from './resource-watchers-registry.js';
 
 // If the number of contexts in the kubeconfig file is greater than this number,
 // only the connectivity to the current context will be checked
 const MAX_NON_CURRENT_CONTEXTS_TO_CHECK = 10;
-
-// ContextInternalState stores informers for a kube context
-type ContextInternalState = Map<ResourceName, Informer<KubernetesObject>>;
-
-// CheckingState indicates the state of the check for a context
-export interface CheckingState {
-  state: 'waiting' | 'checking' | 'gaveup';
-}
-
-// ContextState stores information for the user about a kube context: is the cluster reachable, the number
-// of instances of different resources
-interface ContextState {
-  checking: CheckingState;
-  error?: string;
-  reachable: boolean;
-  resources: ContextStateResources;
-}
-
-// A selection of resources, to indicate the 'general' status of a context
-type selectedResources = ['pods', 'deployments'];
-
-// resources managed by podman desktop, excepted the primary ones
-// This is where to add new resources when adding new informers
-const secondaryResources = [
-  'services',
-  'ingresses',
-  'routes',
-  'configmaps',
-  'secrets',
-  'nodes',
-  'persistentvolumeclaims',
-] as const;
-
-export type SelectedResourceName = selectedResources[number];
-export type SecondaryResourceName = (typeof secondaryResources)[number];
-export type ResourceName = SelectedResourceName | SecondaryResourceName;
-
-function isSecondaryResourceName(value: string): value is SecondaryResourceName {
-  return secondaryResources.includes(value as SecondaryResourceName);
-}
-
-export type ContextStateResources = {
-  [resourceName in ResourceName]: KubernetesObject[];
-};
-
-// information sent: status and count of selected resources
-export interface ContextGeneralState {
-  checking?: CheckingState;
-  error?: string;
-  reachable: boolean;
-  resources: SelectedResourcesCount;
-}
-
-export type SelectedResourcesCount = {
-  [resourceName in SelectedResourceName]: number;
-};
 
 interface CreateInformerOptions<T> {
   // resource name, for logging
@@ -174,205 +124,16 @@ interface DispatchOptions {
   resources: ResourcesDispatchOptions;
 }
 
-class Backoff {
-  private readonly initial: number;
-  constructor(
-    public value: number,
-    private readonly max: number,
-    private readonly jitter: number,
-  ) {
-    this.initial = value;
-    this.value += this.getJitter();
-  }
-  get(): number {
-    const current = this.value;
-    if (this.value < this.max) {
-      this.value *= 2;
-      this.value += this.getJitter();
-    }
-    return current;
-  }
-  reset(): void {
-    this.value = this.initial + this.getJitter();
-  }
-
-  private getJitter(): number {
-    // eslint-disable-next-line sonarjs/pseudo-random
-    return Math.floor(this.jitter * Math.random());
-  }
-}
-
-export class ContextsStates {
-  private state = new Map<string, ContextState>();
-  private informers = new Map<string, ContextInternalState>();
-
-  hasContext(name: string): boolean {
-    return this.informers.has(name);
-  }
-
-  hasInformer(context: string, resourceName: ResourceName): boolean {
-    const informers = this.informers.get(context);
-    return !!informers?.get(resourceName);
-  }
-
-  setInformers(name: string, informers: ContextInternalState | undefined): void {
-    if (informers) {
-      this.informers.set(name, informers);
-    }
-  }
-
-  setResourceInformer(contextName: string, resourceName: ResourceName, informer: Informer<KubernetesObject>): void {
-    const informers = this.informers.get(contextName);
-    if (!informers) {
-      throw new Error(`watchers for context ${contextName} not found`);
-    }
-    informers.set(resourceName, informer);
-  }
-
-  getContextsNames(): Iterable<string> {
-    return this.informers.keys();
-  }
-
-  getContextsGeneralState(): Map<string, ContextGeneralState> {
-    const result = new Map<string, ContextGeneralState>();
-    this.state.forEach((val, key) => {
-      result.set(key, {
-        ...val,
-        resources: {
-          pods: val.reachable ? val.resources.pods.length : 0,
-          deployments: val.reachable ? val.resources.deployments.length : 0,
-        },
-      });
-    });
-    return result;
-  }
-
-  getContextsCheckingState(): Map<string, CheckingState> {
-    const result = new Map<string, CheckingState>();
-    this.state.forEach((val, key) => {
-      result.set(key, val.checking);
-    });
-    return result;
-  }
-
-  getCurrentContextGeneralState(current: string): ContextGeneralState {
-    if (current) {
-      const state = this.state.get(current);
-      if (state) {
-        return {
-          ...state,
-          resources: {
-            pods: state.reachable ? state.resources.pods.length : 0,
-            deployments: state.reachable ? state.resources.deployments.length : 0,
-          },
-        };
-      }
-    }
-    return {
-      reachable: false,
-      error: 'no current context',
-      resources: { pods: 0, deployments: 0 },
-    };
-  }
-
-  getContextResources(current: string, resourceName: ResourceName): KubernetesObject[] {
-    if (current) {
-      const state = this.state.get(current);
-      if (!state?.reachable) {
-        return [];
-      }
-      if (state) {
-        return state.resources[resourceName];
-      }
-    }
-    return [];
-  }
-
-  isReachable(contextName: string): boolean {
-    return this.state.get(contextName)?.reachable ?? false;
-  }
-
-  safeSetState(name: string, update: (previous: ContextState) => void): void {
-    if (!this.state.has(name)) {
-      this.state.set(name, {
-        checking: { state: 'waiting' },
-        error: undefined,
-        reachable: false,
-        resources: {
-          pods: [],
-          deployments: [],
-          nodes: [],
-          persistentvolumeclaims: [],
-          services: [],
-          ingresses: [],
-          routes: [],
-          configmaps: [],
-          secrets: [],
-          // add new resources here when adding new informers
-        },
-      });
-    }
-    const val = this.state.get(name);
-    if (!val) {
-      throw new Error('value not correctly set in map');
-    }
-    update(val);
-  }
-
-  async dispose(name: string): Promise<void> {
-    const informers = this.informers.get(name);
-    if (informers) {
-      for (const informer of informers.values()) {
-        await informer.stop();
-      }
-    }
-    this.informers.delete(name);
-    this.state.delete(name);
-  }
-
-  async disposeSecondaryInformers(contextName: string): Promise<void> {
-    const informers = this.informers.get(contextName);
-    if (informers) {
-      for (const [resourceName, informer] of informers) {
-        if (isSecondaryResourceName(resourceName)) {
-          await informer?.stop();
-          // We clear the informer and the local state
-          informers.delete(resourceName);
-          const state = this.state.get(contextName);
-          if (state) {
-            state.resources[resourceName] = [];
-          }
-        }
-      }
-    }
-  }
-}
-
-class SecondaryResourceWatchersRegistry {
-  // Map resourceName to number of watchers
-  private watchingSecondaryResource = new Map<string, number>();
-
-  subscribe(resourceName: string): void {
-    let count = this.watchingSecondaryResource.get(resourceName);
-    if (count === undefined) {
-      this.watchingSecondaryResource.set(resourceName, 0);
-      count = 0;
-    }
-    this.watchingSecondaryResource.set(resourceName, count + 1);
-  }
-
-  unsubscribe(resourceName: string): void {
-    const count = this.watchingSecondaryResource.get(resourceName);
-    if (count === undefined) {
-      throw new Error(`unsubscribe before subscribe on resource ${resourceName}`);
-    }
-    this.watchingSecondaryResource.set(resourceName, count - 1);
-  }
-
-  hasSubscribers(resourceName: string): boolean {
-    const count = this.watchingSecondaryResource.get(resourceName);
-    return !!count;
-  }
+// Options when calling setStateAndDispatch
+interface SetStateAndDispatchOptions {
+  // true to send checking-state update event, false by default
+  checkingState?: boolean;
+  // true to send general-state update event, false by default
+  sendGeneral?: boolean;
+  // resources for which to send a resource-specific update event
+  resources?: ResourcesDispatchOptions;
+  // the caller can modify the `previous` state in this function, which will be called before the state is dispatched
+  update: (previous: ContextState) => void;
 }
 
 // the ContextsState singleton (instantiated by the kubernetes-client singleton)
@@ -381,7 +142,7 @@ export class ContextsManager {
   private kubeConfig = new KubeConfig();
   private states = new ContextsStates();
   private currentContext: KubeContext | undefined;
-  private secondaryWatchers = new SecondaryResourceWatchersRegistry();
+  private secondaryWatchers = new ResourceWatchersRegistry();
 
   private dispatchContextsGeneralStateTimer: NodeJS.Timeout | undefined;
   private dispatchCurrentContextGeneralStateTimer: NodeJS.Timeout | undefined;
@@ -648,8 +409,11 @@ export class ContextsManager {
     let connectionDelay: NodeJS.Timeout | undefined;
     this.setConnectionTimers('pods', timer, connectionDelay);
 
-    this.setStateAndDispatch(context.name, true, false, {}, state => {
-      state.checking = { state: 'checking' };
+    this.setStateAndDispatch(context.name, {
+      checkingState: true,
+      update: state => {
+        state.checking = { state: 'checking' };
+      },
     });
 
     return this.createInformer<V1Pod>(kc, context, path, listFn, {
@@ -659,34 +423,51 @@ export class ContextsManager {
       backoff: new Backoff(backoffInitialValue, backoffLimit, backoffJitter),
       connectionDelay: connectionDelay,
       onAdd: obj => {
-        this.setStateAndDispatch(context.name, false, true, { pods: true }, state => state.resources.pods.push(obj));
+        this.setStateAndDispatch(context.name, {
+          sendGeneral: true,
+          resources: { pods: true },
+          update: state => state.resources.pods.push(obj),
+        });
       },
       onUpdate: obj => {
-        this.setStateAndDispatch(context.name, false, true, { pods: true }, state => {
-          state.resources.pods = state.resources.pods.filter(o => o.metadata?.uid !== obj.metadata?.uid);
-          state.resources.pods.push(obj);
+        this.setStateAndDispatch(context.name, {
+          sendGeneral: true,
+          resources: { pods: true },
+          update: state => {
+            state.resources.pods = state.resources.pods.filter(o => o.metadata?.uid !== obj.metadata?.uid);
+            state.resources.pods.push(obj);
+          },
         });
       },
       onDelete: obj => {
-        this.setStateAndDispatch(
-          context.name,
-          false,
-          true,
-          { pods: true },
-          state => (state.resources.pods = state.resources.pods.filter(d => d.metadata?.uid !== obj.metadata?.uid)),
-        );
+        this.setStateAndDispatch(context.name, {
+          sendGeneral: true,
+          resources: { pods: true },
+          update: state =>
+            (state.resources.pods = state.resources.pods.filter(d => d.metadata?.uid !== obj.metadata?.uid)),
+        });
       },
       onReachable: reachable => {
-        this.setStateAndDispatch(context.name, true, true, dispatchAllResources, state => {
-          state.checking = { state: 'waiting' };
-          state.reachable = reachable;
-          state.error = reachable ? undefined : state.error; // if reachable we remove error
+        this.setStateAndDispatch(context.name, {
+          checkingState: true,
+          sendGeneral: true,
+          resources: dispatchAllResources,
+          update: state => {
+            state.checking = { state: 'waiting' };
+            state.reachable = reachable;
+            state.error = reachable ? undefined : state.error; // if reachable we remove error
+          },
         });
       },
       onConnectionError: error => {
-        this.setStateAndDispatch(context.name, true, true, dispatchAllResources, state => {
-          state.checking = { state: 'waiting' };
-          state.error = error;
+        this.setStateAndDispatch(context.name, {
+          checkingState: true,
+          sendGeneral: true,
+          resources: dispatchAllResources,
+          update: state => {
+            state.checking = { state: 'waiting' };
+            state.error = error;
+          },
         });
       },
     });
@@ -705,27 +486,33 @@ export class ContextsManager {
       backoff: new Backoff(backoffInitialValue, backoffLimit, backoffJitter),
       connectionDelay: connectionDelay,
       onAdd: obj => {
-        this.setStateAndDispatch(context.name, false, true, { deployments: true }, state =>
-          state.resources.deployments.push(obj),
-        );
+        this.setStateAndDispatch(context.name, {
+          sendGeneral: true,
+          resources: { deployments: true },
+          update: state => state.resources.deployments.push(obj),
+        });
       },
       onUpdate: obj => {
-        this.setStateAndDispatch(context.name, false, true, { deployments: true }, state => {
-          state.resources.deployments = state.resources.deployments.filter(o => o.metadata?.uid !== obj.metadata?.uid);
-          state.resources.deployments.push(obj);
+        this.setStateAndDispatch(context.name, {
+          sendGeneral: true,
+          resources: { deployments: true },
+          update: state => {
+            state.resources.deployments = state.resources.deployments.filter(
+              o => o.metadata?.uid !== obj.metadata?.uid,
+            );
+            state.resources.deployments.push(obj);
+          },
         });
       },
       onDelete: obj => {
-        this.setStateAndDispatch(
-          context.name,
-          false,
-          true,
-          { deployments: true },
-          state =>
+        this.setStateAndDispatch(context.name, {
+          sendGeneral: true,
+          resources: { deployments: true },
+          update: state =>
             (state.resources.deployments = state.resources.deployments.filter(
               d => d.metadata?.uid !== obj.metadata?.uid,
             )),
-        );
+        });
       },
     });
   }
@@ -743,27 +530,28 @@ export class ContextsManager {
       backoff: new Backoff(backoffInitialValue, backoffLimit, backoffJitter),
       connectionDelay: connectionDelay,
       onAdd: obj => {
-        this.setStateAndDispatch(context.name, false, false, { configmaps: true }, state =>
-          state.resources.configmaps.push(obj),
-        );
+        this.setStateAndDispatch(context.name, {
+          resources: { configmaps: true },
+          update: state => state.resources.configmaps.push(obj),
+        });
       },
       onUpdate: obj => {
-        this.setStateAndDispatch(context.name, false, false, { configmaps: true }, state => {
-          state.resources.configmaps = state.resources.configmaps.filter(o => o.metadata?.uid !== obj.metadata?.uid);
-          state.resources.configmaps.push(obj);
+        this.setStateAndDispatch(context.name, {
+          resources: { configmaps: true },
+          update: state => {
+            state.resources.configmaps = state.resources.configmaps.filter(o => o.metadata?.uid !== obj.metadata?.uid);
+            state.resources.configmaps.push(obj);
+          },
         });
       },
       onDelete: obj => {
-        this.setStateAndDispatch(
-          context.name,
-          false,
-          false,
-          { configmaps: true },
-          state =>
+        this.setStateAndDispatch(context.name, {
+          resources: { configmaps: true },
+          update: state =>
             (state.resources.configmaps = state.resources.configmaps.filter(
               d => d.metadata?.uid !== obj.metadata?.uid,
             )),
-        );
+        });
       },
     });
   }
@@ -781,25 +569,26 @@ export class ContextsManager {
       backoff: new Backoff(backoffInitialValue, backoffLimit, backoffJitter),
       connectionDelay: connectionDelay,
       onAdd: obj => {
-        this.setStateAndDispatch(context.name, false, false, { secrets: true }, state =>
-          state.resources.secrets.push(obj),
-        );
+        this.setStateAndDispatch(context.name, {
+          resources: { secrets: true },
+          update: state => state.resources.secrets.push(obj),
+        });
       },
       onUpdate: obj => {
-        this.setStateAndDispatch(context.name, false, false, { secrets: true }, state => {
-          state.resources.secrets = state.resources.secrets.filter(o => o.metadata?.uid !== obj.metadata?.uid);
-          state.resources.secrets.push(obj);
+        this.setStateAndDispatch(context.name, {
+          resources: { secrets: true },
+          update: state => {
+            state.resources.secrets = state.resources.secrets.filter(o => o.metadata?.uid !== obj.metadata?.uid);
+            state.resources.secrets.push(obj);
+          },
         });
       },
       onDelete: obj => {
-        this.setStateAndDispatch(
-          context.name,
-          false,
-          false,
-          { secrets: true },
-          state =>
+        this.setStateAndDispatch(context.name, {
+          resources: { secrets: true },
+          update: state =>
             (state.resources.secrets = state.resources.secrets.filter(d => d.metadata?.uid !== obj.metadata?.uid)),
-        );
+        });
       },
     });
   }
@@ -822,29 +611,30 @@ export class ContextsManager {
       backoff: new Backoff(backoffInitialValue, backoffLimit, backoffJitter),
       connectionDelay: connectionDelay,
       onAdd: obj => {
-        this.setStateAndDispatch(context.name, false, false, { persistentvolumeclaims: true }, state =>
-          state.resources.persistentvolumeclaims.push(obj),
-        );
+        this.setStateAndDispatch(context.name, {
+          resources: { persistentvolumeclaims: true },
+          update: state => state.resources.persistentvolumeclaims.push(obj),
+        });
       },
       onUpdate: obj => {
-        this.setStateAndDispatch(context.name, false, false, { persistentvolumeclaims: true }, state => {
-          state.resources.persistentvolumeclaims = state.resources.persistentvolumeclaims.filter(
-            o => o.metadata?.uid !== obj.metadata?.uid,
-          );
-          state.resources.persistentvolumeclaims.push(obj);
+        this.setStateAndDispatch(context.name, {
+          resources: { persistentvolumeclaims: true },
+          update: state => {
+            state.resources.persistentvolumeclaims = state.resources.persistentvolumeclaims.filter(
+              o => o.metadata?.uid !== obj.metadata?.uid,
+            );
+            state.resources.persistentvolumeclaims.push(obj);
+          },
         });
       },
       onDelete: obj => {
-        this.setStateAndDispatch(
-          context.name,
-          false,
-          false,
-          { persistentvolumeclaims: true },
-          state =>
+        this.setStateAndDispatch(context.name, {
+          resources: { persistentvolumeclaims: true },
+          update: state =>
             (state.resources.persistentvolumeclaims = state.resources.persistentvolumeclaims.filter(
               d => d.metadata?.uid !== obj.metadata?.uid,
             )),
-        );
+        });
       },
     });
   }
@@ -862,22 +652,26 @@ export class ContextsManager {
       backoff: new Backoff(backoffInitialValue, backoffLimit, backoffJitter),
       connectionDelay: connectionDelay,
       onAdd: obj => {
-        this.setStateAndDispatch(context.name, false, false, { nodes: true }, state => state.resources.nodes.push(obj));
+        this.setStateAndDispatch(context.name, {
+          resources: { nodes: true },
+          update: state => state.resources.nodes.push(obj),
+        });
       },
       onUpdate: obj => {
-        this.setStateAndDispatch(context.name, false, false, { nodes: true }, state => {
-          state.resources.nodes = state.resources.nodes.filter(o => o.metadata?.uid !== obj.metadata?.uid);
-          state.resources.nodes.push(obj);
+        this.setStateAndDispatch(context.name, {
+          resources: { nodes: true },
+          update: state => {
+            state.resources.nodes = state.resources.nodes.filter(o => o.metadata?.uid !== obj.metadata?.uid);
+            state.resources.nodes.push(obj);
+          },
         });
       },
       onDelete: obj => {
-        this.setStateAndDispatch(
-          context.name,
-          false,
-          false,
-          { nodes: true },
-          state => (state.resources.nodes = state.resources.nodes.filter(d => d.metadata?.uid !== obj.metadata?.uid)),
-        );
+        this.setStateAndDispatch(context.name, {
+          resources: { nodes: true },
+          update: state =>
+            (state.resources.nodes = state.resources.nodes.filter(d => d.metadata?.uid !== obj.metadata?.uid)),
+        });
       },
     });
   }
@@ -895,25 +689,26 @@ export class ContextsManager {
       backoff: new Backoff(backoffInitialValue, backoffLimit, backoffJitter),
       connectionDelay: connectionDelay,
       onAdd: obj => {
-        this.setStateAndDispatch(context.name, false, false, { services: true }, state =>
-          state.resources.services.push(obj),
-        );
+        this.setStateAndDispatch(context.name, {
+          resources: { services: true },
+          update: state => state.resources.services.push(obj),
+        });
       },
       onUpdate: obj => {
-        this.setStateAndDispatch(context.name, false, false, { services: true }, state => {
-          state.resources.services = state.resources.services.filter(o => o.metadata?.uid !== obj.metadata?.uid);
-          state.resources.services.push(obj);
+        this.setStateAndDispatch(context.name, {
+          resources: { services: true },
+          update: state => {
+            state.resources.services = state.resources.services.filter(o => o.metadata?.uid !== obj.metadata?.uid);
+            state.resources.services.push(obj);
+          },
         });
       },
       onDelete: obj => {
-        this.setStateAndDispatch(
-          context.name,
-          false,
-          false,
-          { services: true },
-          state =>
+        this.setStateAndDispatch(context.name, {
+          resources: { services: true },
+          update: state =>
             (state.resources.services = state.resources.services.filter(d => d.metadata?.uid !== obj.metadata?.uid)),
-        );
+        });
       },
     });
   }
@@ -931,25 +726,26 @@ export class ContextsManager {
       backoff: new Backoff(backoffInitialValue, backoffLimit, backoffJitter),
       connectionDelay: connectionDelay,
       onAdd: obj => {
-        this.setStateAndDispatch(context.name, false, false, { ingresses: true }, state =>
-          state.resources.ingresses.push(obj),
-        );
+        this.setStateAndDispatch(context.name, {
+          resources: { ingresses: true },
+          update: state => state.resources.ingresses.push(obj),
+        });
       },
       onUpdate: obj => {
-        this.setStateAndDispatch(context.name, false, false, { ingresses: true }, state => {
-          state.resources.ingresses = state.resources.ingresses.filter(o => o.metadata?.uid !== obj.metadata?.uid);
-          state.resources.ingresses.push(obj);
+        this.setStateAndDispatch(context.name, {
+          resources: { ingresses: true },
+          update: state => {
+            state.resources.ingresses = state.resources.ingresses.filter(o => o.metadata?.uid !== obj.metadata?.uid);
+            state.resources.ingresses.push(obj);
+          },
         });
       },
       onDelete: obj => {
-        this.setStateAndDispatch(
-          context.name,
-          false,
-          false,
-          { ingresses: true },
-          state =>
+        this.setStateAndDispatch(context.name, {
+          resources: { ingresses: true },
+          update: state =>
             (state.resources.ingresses = state.resources.ingresses.filter(d => d.metadata?.uid !== obj.metadata?.uid)),
-        );
+        });
       },
     });
   }
@@ -973,29 +769,30 @@ export class ContextsManager {
       backoff: new Backoff(backoffInitialValue, backoffLimit, backoffJitter),
       connectionDelay: connectionDelay,
       onAdd: obj => {
-        this.setStateAndDispatch(context.name, false, false, { routes: true }, state =>
-          state.resources.routes.push(obj),
-        );
+        this.setStateAndDispatch(context.name, {
+          resources: { routes: true },
+          update: state => state.resources.routes.push(obj),
+        });
       },
       onUpdate: obj => {
-        this.setStateAndDispatch(context.name, false, false, { routes: true }, state => {
-          state.resources.routes = state.resources.routes.filter(
-            o => o.metadata?.uid !== (obj.metadata as V1ObjectMeta)?.uid,
-          );
-          state.resources.routes.push(obj);
+        this.setStateAndDispatch(context.name, {
+          resources: { routes: true },
+          update: state => {
+            state.resources.routes = state.resources.routes.filter(
+              o => o.metadata?.uid !== (obj.metadata as V1ObjectMeta)?.uid,
+            );
+            state.resources.routes.push(obj);
+          },
         });
       },
       onDelete: obj => {
-        this.setStateAndDispatch(
-          context.name,
-          false,
-          false,
-          { routes: true },
-          state =>
+        this.setStateAndDispatch(context.name, {
+          resources: { routes: true },
+          update: state =>
             (state.resources.routes = state.resources.routes.filter(
               d => d.metadata?.uid !== (obj.metadata as V1ObjectMeta)?.uid,
             )),
-        );
+        });
       },
     });
   }
@@ -1097,8 +894,11 @@ export class ContextsManager {
     options: CreateInformerOptions<T>,
   ): void {
     if (options.checkReachable) {
-      this.setStateAndDispatch(context.name, true, false, {}, state => {
-        state.checking = { state: 'checking' };
+      this.setStateAndDispatch(context.name, {
+        checkingState: true,
+        update: state => {
+          state.checking = { state: 'checking' };
+        },
       });
     }
     informer.start().catch((err: unknown) => {
@@ -1129,19 +929,13 @@ export class ContextsManager {
     });
   }
 
-  private setStateAndDispatch(
-    name: string,
-    checkingState: boolean,
-    sendGeneral: boolean,
-    options: ResourcesDispatchOptions,
-    update: (previous: ContextState) => void,
-  ): void {
-    this.states.safeSetState(name, update);
+  private setStateAndDispatch(name: string, options: SetStateAndDispatchOptions): void {
+    this.states.safeSetState(name, options.update);
     this.dispatch({
-      checkingState,
-      contextsGeneralState: sendGeneral,
-      currentContextGeneralState: sendGeneral,
-      resources: options,
+      checkingState: options.checkingState ?? false,
+      contextsGeneralState: options.sendGeneral ?? false,
+      currentContextGeneralState: options.sendGeneral ?? false,
+      resources: options.resources ?? {},
     });
   }
 
