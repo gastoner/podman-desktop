@@ -22,7 +22,7 @@ import * as http from 'node:http';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import type { ContainerEngineInfo, ContainerProviderConnection, ProviderConnectionShellAccess, RunError } from '@podman-desktop/api';
+import type { ContainerEngineInfo, RunError } from '@podman-desktop/api';
 import * as extensionApi from '@podman-desktop/api';
 import { compareVersions } from 'compare-versions';
 
@@ -57,7 +57,6 @@ import {
 } from './util';
 import { getDisguisedPodmanInformation, getSocketPath, isDisguisedPodman } from './warnings';
 import { WslHelper } from './wsl-helper';
-import { PodmanMachineStream } from './podman-machine-stream';
 
 type StatusHandler = (name: string, event: extensionApi.ProviderConnectionStatus) => void;
 
@@ -814,7 +813,6 @@ export async function registerProviderFor(
   }
 
   const shellAccessProvider = new PodmanMachineStream(machineInfo);
-  shellAccessProvider.init();
 
   const containerProviderConnection: extensionApi.ContainerProviderConnection = {
     name: machineInfo.name,
