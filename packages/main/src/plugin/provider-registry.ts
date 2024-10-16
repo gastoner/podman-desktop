@@ -23,7 +23,6 @@ import type {
   ContainerProviderConnection,
   KubernetesProviderConnection,
   Logger,
-  PodmanMachineStream,
   Provider,
   ProviderAutostart,
   ProviderCleanup,

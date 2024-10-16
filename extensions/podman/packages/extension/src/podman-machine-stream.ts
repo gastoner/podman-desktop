@@ -23,8 +23,8 @@ import type {
   ProviderConnectionShellAccess,
   ProviderConnectionShellAccessData,
   ProviderConnectionShellAccessError,
+  ProviderConnectionShellAccessSession,
   ProviderConnectionShellDimensions,
-  PodmanMachineStream
 } from '@podman-desktop/api';
 import { EventEmitter } from '@podman-desktop/api';
 import type { ClientChannel } from 'ssh2';
@@ -32,7 +32,7 @@ import { Client } from 'ssh2';
 
 import type { MachineInfo } from './extension';
 
-export class PodmanMachineStreamImpl implements PodmanMachineStream {
+export class ProviderConnectionShellAccessImpl implements ProviderConnectionShellAccess {
   #host: string;
   #port: number;
   #username: string;
@@ -70,24 +70,30 @@ export class PodmanMachineStreamImpl implements PodmanMachineStream {
     }
   }
 
-  disconnect(): void {
-    this.#connected = false;
-    this.#client?.end();
-    this.#client?.destroy();
+  disposeListeners(): void {
     this.onDataEmit.dispose();
     this.onErrorEmit.dispose();
     this.onEndEmit.dispose();
   }
 
-  connect(): ProviderConnectionShellAccess {
+  close(): void {
+    this.#connected = false;
+    this.#client?.end();
+    this.#client?.destroy();
+    this.disposeListeners();
+  }
+
+  open(): ProviderConnectionShellAccessSession {
     // Avoid multiple connections
     if (this.#connected) {
+      this.disposeListeners();
       return {
         onData: this.onData,
         onError: this.onError,
         onEnd: this.onEnd,
         write: this.write.bind(this),
         resize: this.resize.bind(this),
+        close: this.close,
       };
     }
 
@@ -106,7 +112,7 @@ export class PodmanMachineStreamImpl implements PodmanMachineStream {
           stream
             .on('close', () => {
               this.onEndEmit.fire();
-              this.disconnect();
+              this.close();
             })
             .on('data', (data: string) => {
               this.onDataEmit.fire({ data: data });
@@ -129,6 +135,7 @@ export class PodmanMachineStreamImpl implements PodmanMachineStream {
       onEnd: this.onEnd,
       write: this.write.bind(this),
       resize: this.resize.bind(this),
+      close: this.close,
     };
   }
 }

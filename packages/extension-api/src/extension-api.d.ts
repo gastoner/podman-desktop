@@ -393,7 +393,7 @@ declare module '@podman-desktop/api' {
     displayName?: string;
     type: 'docker' | 'podman';
     endpoint: ContainerProviderConnectionEndpoint;
-    podmanMachineStream?: PodmanMachineStream;
+    shellAccess?: ProviderConnectionShellAccess;
     lifecycle?: ProviderConnectionLifecycle;
     status(): ProviderConnectionStatus;
     vmType?: string;
@@ -789,17 +789,17 @@ declare module '@podman-desktop/api' {
     connection: ContainerProviderConnection;
   }
 
-  export class PodmanMachineStream {
-    connect():ProviderConnectionShellAccess;
-    disconnect():void;
+  export class ProviderConnectionShellAccess {
+    open(): ProviderConnectionShellAccessSession;
   }
 
-  export interface ProviderConnectionShellAccess {
+  export interface ProviderConnectionShellAccessSession {
     onData: Event<ProviderConnectionShellAccessData>;
     onError: Event<ProviderConnectionShellAccessError>;
     onEnd: Event<void>;
     write(data: string): void;
     resize(dimensions: ProviderConnectionShellDimensions): void;
+    close(): void;
   }
 
   export interface ProviderConnectionShellDimensions {

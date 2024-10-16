@@ -1,11 +1,11 @@
 <script lang="ts">
 import '@xterm/xterm/css/xterm.css';
 
-import type { ProviderConnectionStatus, ProviderConnectionShellDimensions } from '@podman-desktop/api';
+import type { ProviderConnectionShellDimensions, ProviderConnectionStatus } from '@podman-desktop/api';
 import { EmptyScreen } from '@podman-desktop/ui-svelte';
 import { FitAddon } from '@xterm/addon-fit';
 import { SerializeAddon } from '@xterm/addon-serialize';
-import { type IDisposable, Terminal } from '@xterm/xterm';
+import { Terminal } from '@xterm/xterm';
 import { onDestroy, onMount } from 'svelte';
 import { router } from 'tinro';
 
@@ -29,8 +29,7 @@ let currentRouterPath: string;
 let sendCallbackId: number | undefined;
 let terminalContent: string = '';
 let serializeAddon: SerializeAddon;
-let lastState = $state<ProviderConnectionStatus>('stopped');
-let onDataDisposible: IDisposable;
+let lastState = $state<ProviderConnectionStatus>('started');
 
 $effect(() => {
   const connectionStatus = connectionInfo.status;
@@ -61,8 +60,7 @@ function receiveEndCallback() {
     .shellInProviderConnection(provider.internalId, connectionInfo, receiveDataCallback, () => {}, receiveEndCallback)
     .then(id => {
       sendCallbackId = id;
-      onDataDisposible?.dispose();
-      onDataDisposible = shellTerminal?.onData((data: string) => {
+      shellTerminal?.onData((data: string) => {
         window.shellInProviderConnectionSend(id, data);
       });
     });
@@ -90,8 +88,7 @@ async function executeShellIntoProviderConnection() {
 
   await window.shellInProviderConnectionResize(callbackId, dimensions);
   // pass data from xterm to provider
-  onDataDisposible?.dispose();
-  onDataDisposible = shellTerminal?.onData((data: string) => {
+  shellTerminal?.onData((data: string) => {
     window.shellInProviderConnectionSend(callbackId, data);
   });
 
@@ -127,8 +124,7 @@ async function refreshTerminal() {
       fontSize,
       lineHeight,
     };
-    // \r\n for starting new terminal on next line
-    shellTerminal.write(existingTerminal.terminal + '\r\n');
+    shellTerminal.write(existingTerminal.terminal);
   }
 
   const fitAddon = new FitAddon();
@@ -169,7 +165,6 @@ onDestroy(() => {
     terminal: terminalContent,
   });
   serializeAddon?.dispose();
-  onDataDisposible?.dispose();
   shellTerminal?.dispose();
 });
 </script>
