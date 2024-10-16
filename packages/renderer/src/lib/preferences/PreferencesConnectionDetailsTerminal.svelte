@@ -1,7 +1,7 @@
 <script lang="ts">
 import '@xterm/xterm/css/xterm.css';
 
-import type { ProviderConnectionStatus, ShellDimensions } from '@podman-desktop/api';
+import type { ProviderConnectionStatus, ProviderConnectionShellDimensions } from '@podman-desktop/api';
 import { EmptyScreen } from '@podman-desktop/ui-svelte';
 import { FitAddon } from '@xterm/addon-fit';
 import { SerializeAddon } from '@xterm/addon-serialize';
@@ -42,7 +42,7 @@ $effect(() => {
 
 async function restartTerminal() {
   await executeShellIntoProviderConnection();
-  window.dispatchEvent(new Event('setWindow'));
+  window.dispatchEvent(new Event('resize'));
 }
 
 // update current route scheme
@@ -83,12 +83,12 @@ async function executeShellIntoProviderConnection() {
     receiveEndCallback,
   );
 
-  const dimensions: ShellDimensions = {
+  const dimensions: ProviderConnectionShellDimensions = {
     rows: shellTerminal.rows,
     cols: shellTerminal.cols,
   };
 
-  await window.shellInProviderConnectionSetWindow(callbackId, dimensions);
+  await window.shellInProviderConnectionResize(callbackId, dimensions);
   // pass data from xterm to provider
   onDataDisposible?.dispose();
   onDataDisposible = shellTerminal?.onData((data: string) => {
@@ -139,15 +139,15 @@ async function refreshTerminal() {
   shellTerminal.open(terminalXtermDiv);
 
   // call fit addon each time we resize the window
-  window.addEventListener('setWindow', () => {
+  window.addEventListener('resize', () => {
     if (currentRouterPath === `/providers/${provider.id}/terminal`) {
       fitAddon.fit();
       if (sendCallbackId) {
-        const dimensions: ShellDimensions = {
+        const dimensions: ProviderConnectionShellDimensions = {
           rows: shellTerminal?.rows,
           cols: shellTerminal?.cols,
         };
-        window.shellInProviderConnectionSetWindow(sendCallbackId, dimensions);
+        window.shellInProviderConnectionResize(sendCallbackId, dimensions);
       }
     }
   });

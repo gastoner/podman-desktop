@@ -1117,7 +1117,7 @@ export class PluginSystem {
 
     const providerRegistryShellInProviderConnectionSendCallback = new Map<
       number,
-      { write: (param: string) => void; setWindow: (dimensions: containerDesktopAPI.ShellDimensions) => void }
+      { write: (param: string) => void; resize: (dimensions: containerDesktopAPI.ProviderConnectionShellDimensions) => void }
     >();
     this.ipcHandle(
       'provider-registry:shellInProviderConnection',
@@ -1160,11 +1160,11 @@ export class PluginSystem {
     );
 
     this.ipcHandle(
-      'provider-registry:shellInProviderConnectionSetWindow',
-      async (_listener, onDataId: number, dimensions: containerDesktopAPI.ShellDimensions): Promise<void> => {
+      'provider-registry:shellInProviderConnectionResize',
+      async (_listener, onDataId: number, dimensions: containerDesktopAPI.ProviderConnectionShellDimensions): Promise<void> => {
         const callback = providerRegistryShellInProviderConnectionSendCallback.get(onDataId);
         if (callback) {
-          callback.setWindow(dimensions);
+          callback.resize(dimensions);
         }
       },
     );

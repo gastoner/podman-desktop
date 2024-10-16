@@ -23,12 +23,14 @@ import type {
   ContainerProviderConnection,
   KubernetesProviderConnection,
   Logger,
+  PodmanMachineStream,
   Provider,
   ProviderAutostart,
   ProviderCleanup,
   ProviderCleanupAction,
   ProviderCleanupExecuteOptions,
   ProviderConnectionShellAccess,
+  ProviderConnectionShellDimensions,
   ProviderConnectionStatus,
   ProviderContainerConnection,
   ProviderDetectionCheck,
@@ -41,7 +43,6 @@ import type {
   ProviderUpdate,
   RegisterContainerConnectionEvent,
   RegisterKubernetesConnectionEvent,
-  ShellDimensions,
   UnregisterContainerConnectionEvent,
   UnregisterKubernetesConnectionEvent,
   UpdateContainerConnectionEvent,
@@ -1273,33 +1274,36 @@ export class ProviderRegistry {
     onData: (data: string) => void,
     onError: (error: string) => void,
     onEnd: () => void,
-  ): Promise<{ write: (param: string) => void; setWindow: (dimensions: ShellDimensions) => void }> {
+  ): Promise<{ write: (param: string) => void; resize: (dimensions: ProviderConnectionShellDimensions) => void }> {
     try {
       const containerConnection = this.getMatchingConnectionFromProvider(internalProviderId, providerConnectionInfo);
-      let shellAccess: ProviderConnectionShellAccess | undefined;
+      let podmanMachineStream: PodmanMachineStream | undefined;
+      let connection: ProviderConnectionShellAccess | undefined;
+
       if (this.isContainerConnection(containerConnection) && providerConnectionInfo.status === 'started') {
-        shellAccess = containerConnection.shellAccess;
+        podmanMachineStream = containerConnection.podmanMachineStream;
+        podmanMachineStream?.disconnect();
+        connection = podmanMachineStream?.connect();
+
         // Removes listeners and deletes client if exist
-        shellAccess?.stopConnection();
-        shellAccess?.onData(data => {
+        connection?.onData(data => {
           onData(data.data);
         });
-        shellAccess?.onError(error => {
+        connection?.onError(error => {
           onError(error.error);
         });
-        shellAccess?.onEnd(onEnd);
-        shellAccess?.startConnection();
+        connection?.onEnd(onEnd);
       }
 
       return {
         write: (data: string): void => {
-          if (shellAccess) {
-            shellAccess.write(data);
+          if (connection) {
+            connection.write(data);
           }
         },
-        setWindow: (dimension: ShellDimensions): void => {
-          if (shellAccess) {
-            shellAccess.setWindow(dimension);
+        resize: (dimension: ProviderConnectionShellDimensions): void => {
+          if (connection) {
+            connection.resize(dimension);
           }
         },
       };

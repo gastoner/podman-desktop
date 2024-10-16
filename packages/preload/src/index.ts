@@ -643,9 +643,9 @@ export function initExposure(): void {
   );
 
   contextBridge.exposeInMainWorld(
-    'shellInProviderConnectionSetWindow',
-    async (dataId: number, dimensions: containerDesktopAPI.ShellDimensions) => {
-      return ipcInvoke('provider-registry:shellInProviderConnectionSetWindow', dataId, dimensions);
+    'shellInProviderConnectionResize',
+    async (dataId: number, dimensions: containerDesktopAPI.ProviderConnectionShellDimensions) => {
+      return ipcInvoke('provider-registry:shellInProviderConnectionResize', dataId, dimensions);
     },
   );
 

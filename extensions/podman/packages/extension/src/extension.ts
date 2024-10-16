@@ -38,7 +38,7 @@ import { getPodmanCli, getPodmanInstallation } from './podman-cli';
 import { PodmanConfiguration } from './podman-configuration';
 import { PodmanInfoHelper } from './podman-info-helper';
 import { PodmanInstall } from './podman-install';
-import { PodmanMachineStream } from './podman-machine-stream';
+import { PodmanMachineStreamImpl } from './podman-machine-stream';
 import { PodmanRemoteConnections } from './podman-remote-connections';
 import { QemuHelper } from './qemu-helper';
 import { RegistrySetup } from './registry-setup';
@@ -802,14 +802,13 @@ export async function registerProviderFor(
     };
   }
 
-  const shellAccessProvider = new PodmanMachineStream(machineInfo);
-
+  const podmanMachineStream = new PodmanMachineStreamImpl(machineInfo);
   const containerProviderConnection: extensionApi.ContainerProviderConnection = {
     name: machineInfo.name,
     displayName: prettyMachineName(machineInfo.name),
     type: 'podman',
     status: () => podmanMachinesStatuses.get(machineInfo.name) ?? 'unknown',
-    shellAccess: shellAccessProvider,
+    podmanMachineStream: podmanMachineStream,
     lifecycle,
     endpoint: {
       socketPath,
