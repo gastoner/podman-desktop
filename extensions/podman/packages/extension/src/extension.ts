@@ -812,14 +812,13 @@ export async function registerProviderFor(
     };
   }
 
-  const shellAccessProvider = new PodmanMachineStream(machineInfo);
-
+  const podmanMachineStream = new PodmanMachineStreamImpl(machineInfo);
   const containerProviderConnection: extensionApi.ContainerProviderConnection = {
     name: machineInfo.name,
     displayName: prettyMachineName(machineInfo.name),
     type: 'podman',
     status: () => podmanMachinesStatuses.get(machineInfo.name) ?? 'unknown',
-    shellAccess: shellAccessProvider,
+    podmanMachineStream: podmanMachineStream,
     lifecycle,
     endpoint: {
       socketPath,

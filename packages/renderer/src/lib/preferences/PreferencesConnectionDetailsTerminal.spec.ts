@@ -29,7 +29,6 @@ import PreferencesConnectionDetailsTerminal from './PreferencesConnectionDetails
 import type {
   ProviderContainerConnectionInfo,
   ProviderInfo,
-  ProviderKubernetesConnectionInfo,
 } from '/@api/provider-info';
 
 const getConfigurationValueMock = vi.fn();
@@ -78,7 +77,7 @@ test('expect being able to reconnect ', async () => {
   const sendCallbackId = 12345;
   shellInProviderConnectionMock.mockImplementation(
     (
-      _providerConnectionInfo: ProviderContainerConnectionInfo | ProviderKubernetesConnectionInfo,
+      _providerConnectionInfo: ProviderContainerConnectionInfo,
       _providerId: string,
       onData: (data: string) => void,
       _onError: (error: string) => void,
@@ -157,7 +156,7 @@ test('terminal active/ restarts connection after stopping and starting a provide
   const sendCallbackId = 12345;
   shellInProviderConnectionMock.mockImplementation(
     (
-      _providerConnectionInfo: ProviderContainerConnectionInfo | ProviderKubernetesConnectionInfo,
+      _providerConnectionInfo: ProviderContainerConnectionInfo,
       _providerId: string,
       onData: (data: string) => void,
       _onError: (error: string) => void,

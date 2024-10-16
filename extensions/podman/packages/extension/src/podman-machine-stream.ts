@@ -20,9 +20,11 @@ import * as fs from 'node:fs';
 
 import type {
   Event,
+  ProviderConnectionShellAccess,
   ProviderConnectionShellAccessData,
   ProviderConnectionShellAccessError,
-  ShellDimensions,
+  ProviderConnectionShellDimensions,
+  PodmanMachineStream
 } from '@podman-desktop/api';
 import { EventEmitter } from '@podman-desktop/api';
 import type { ClientChannel } from 'ssh2';
@@ -30,7 +32,7 @@ import { Client } from 'ssh2';
 
 import type { MachineInfo } from './extension';
 
-export class PodmanMachineStream {
+export class PodmanMachineStreamImpl implements PodmanMachineStream {
   #host: string;
   #port: number;
   #username: string;
@@ -61,14 +63,14 @@ export class PodmanMachineStream {
     }
   }
 
-  setWindow(dimensions: ShellDimensions): void {
+  resize(dimensions: ProviderConnectionShellDimensions): void {
     if (this.#stream) {
       // rows and cols override width and height when rows and cols are non-zero.
       this.#stream.setWindow(dimensions.rows, dimensions.cols, 0, 0);
     }
   }
 
-  stopConnection(): void {
+  disconnect(): void {
     this.#connected = false;
     this.#client?.end();
     this.#client?.destroy();
@@ -77,10 +79,16 @@ export class PodmanMachineStream {
     this.onEndEmit.dispose();
   }
 
-  startConnection(): void {
-    // To avoid strating multiple SSH connections
+  connect(): ProviderConnectionShellAccess {
+    // Avoid multiple connections
     if (this.#connected) {
-      return;
+      return {
+        onData: this.onData,
+        onError: this.onError,
+        onEnd: this.onEnd,
+        write: this.write.bind(this),
+        resize: this.resize.bind(this),
+      };
     }
 
     this.#client = new Client();
@@ -92,14 +100,13 @@ export class PodmanMachineStream {
             this.onErrorEmit.fire({ error: err.message });
             return;
           }
-
           this.#connected = true;
           this.#stream = stream;
 
           stream
             .on('close', () => {
               this.onEndEmit.fire();
-              this.stopConnection();
+              this.disconnect();
             })
             .on('data', (data: string) => {
               this.onDataEmit.fire({ data: data });
@@ -115,5 +122,13 @@ export class PodmanMachineStream {
         username: this.#username,
         privateKey: fs.readFileSync(this.#privateKey),
       });
+
+    return {
+      onData: this.onData,
+      onError: this.onError,
+      onEnd: this.onEnd,
+      write: this.write.bind(this),
+      resize: this.resize.bind(this),
+    };
   }
 }
