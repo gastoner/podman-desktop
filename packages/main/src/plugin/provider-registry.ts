@@ -23,13 +23,13 @@ import type {
   ContainerProviderConnection,
   KubernetesProviderConnection,
   Logger,
-  PodmanMachineStream,
   Provider,
   ProviderAutostart,
   ProviderCleanup,
   ProviderCleanupAction,
   ProviderCleanupExecuteOptions,
   ProviderConnectionShellAccess,
+  ProviderConnectionShellAccessSession,
   ProviderConnectionShellDimensions,
   ProviderConnectionStatus,
   ProviderContainerConnection,
@@ -1277,15 +1277,11 @@ export class ProviderRegistry {
   ): Promise<{ write: (param: string) => void; resize: (dimensions: ProviderConnectionShellDimensions) => void }> {
     try {
       const containerConnection = this.getMatchingConnectionFromProvider(internalProviderId, providerConnectionInfo);
-      let podmanMachineStream: PodmanMachineStream | undefined;
-      let connection: ProviderConnectionShellAccess | undefined;
-
+      let shellAccess: ProviderConnectionShellAccess | undefined;
+      let connection: ProviderConnectionShellAccessSession | undefined;
       if (this.isContainerConnection(containerConnection) && providerConnectionInfo.status === 'started') {
-        podmanMachineStream = containerConnection.podmanMachineStream;
-        podmanMachineStream?.disconnect();
-        connection = podmanMachineStream?.connect();
-
-        // Removes listeners and deletes client if exist
+        shellAccess = containerConnection.shellAccess;
+        connection = shellAccess?.open();
         connection?.onData(data => {
           onData(data.data);
         });

@@ -26,10 +26,7 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import { providerTerminals } from '/@/stores/provider-terminal-store';
 
 import PreferencesConnectionDetailsTerminal from './PreferencesConnectionDetailsTerminal.svelte';
-import type {
-  ProviderContainerConnectionInfo,
-  ProviderInfo,
-} from '/@api/provider-info';
+import type { ProviderContainerConnectionInfo, ProviderInfo } from '/@api/provider-info';
 
 const getConfigurationValueMock = vi.fn();
 const shellInProviderConnectionMock = vi.fn();

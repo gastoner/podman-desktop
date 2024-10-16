@@ -53,7 +53,7 @@ beforeAll(async () => {
 });
 
 test('should be able to connect', async () => {
-    vi.spyOn(fs, 'readFileSync').mockReturnValue(dummyKey);
+  vi.spyOn(fs, 'readFileSync').mockReturnValue(dummyKey);
   let sshPort = 0;
   let connected = false;
   let authenticated = false;
@@ -108,8 +108,8 @@ test('should be able to connect', async () => {
   await vi.waitFor(() => expect(listenReady).toBeTruthy());
 
   const machineInfo: MachineInfo = {
-    port: sshPort, 
-    remoteUsername: "user",
+    port: sshPort,
+    remoteUsername: 'user',
     identityPath: '/some/path',
   } as unknown as MachineInfo;
 
