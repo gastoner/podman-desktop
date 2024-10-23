@@ -39,7 +39,6 @@ export class ProviderConnectionShellAccessImpl implements ProviderConnectionShel
   #privateKey: string;
   #client: Client | undefined;
   #stream: ClientChannel | undefined;
-  #connected: boolean = false;
 
   constructor(private readonly podmanMachine: MachineInfo) {
     this.#host = 'localhost';
@@ -76,29 +75,23 @@ export class ProviderConnectionShellAccessImpl implements ProviderConnectionShel
     this.onEndEmit.dispose();
   }
 
+  // Going to different tab => closing session + removing listeners
+  // Closes stream with client
   close(): void {
-    this.#connected = false;
-    this.#client?.end();
-    this.#client?.destroy();
+    this.closeStream();
     this.disposeListeners();
   }
 
+  // Closes stream with client
+  closeStream(): void {
+    this.#stream?.removeAllListeners().close();
+    this.#client?.end().destroy();
+    this.#stream = undefined;
+    this.#client = undefined;
+  }
+
   open(): ProviderConnectionShellAccessSession {
-    // Avoid multiple connections
-    if (this.#connected) {
-      this.disposeListeners();
-      return {
-        onData: this.onData,
-        onError: this.onError,
-        onEnd: this.onEnd,
-        write: this.write.bind(this),
-        resize: this.resize.bind(this),
-        close: this.close,
-      };
-    }
-
     this.#client = new Client();
-
     this.#client
       .on('ready', () => {
         this.#client?.shell((err, stream) => {
@@ -106,13 +99,12 @@ export class ProviderConnectionShellAccessImpl implements ProviderConnectionShel
             this.onErrorEmit.fire({ error: err.message });
             return;
           }
-          this.#connected = true;
           this.#stream = stream;
 
           stream
             .on('close', () => {
               this.onEndEmit.fire();
-              this.close();
+              this.closeStream();
             })
             .on('data', (data: string) => {
               this.onDataEmit.fire({ data: data });
