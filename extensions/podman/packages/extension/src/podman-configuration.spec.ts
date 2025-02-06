@@ -18,6 +18,8 @@
 
 import * as fs from 'node:fs';
 
+import type { ProxySettings } from '@podman-desktop/api';
+import type { Mutex } from 'async-mutex';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 import { PodmanConfiguration } from './podman-configuration';
@@ -40,6 +42,10 @@ vi.mock('@podman-desktop/api', async () => {
 class TestPodmanConfiguration extends PodmanConfiguration {
   readContainersConfigFile(): Promise<string> {
     return super.readContainersConfigFile();
+  }
+
+  getMutex(): Mutex {
+    return super.getMutex();
   }
 }
 
@@ -164,4 +170,45 @@ describe('isRosettaEnabled', () => {
 
     expect(isEnabled).toBeFalsy();
   });
+});
+
+test('updateProxySettings should be called one at the time', async () => {
+  const proxySettings: ProxySettings = {
+    httpProxy: 'httpProxy',
+    httpsProxy: 'httpsProxy',
+    noProxy: 'noProxy',
+  };
+
+  // Mock updateProxySettings
+  const updateProxySettingsMock = vi.spyOn(podmanConfiguration, 'updateProxySettings');
+
+  // Spy on acquire and release
+  const mutex = podmanConfiguration.getMutex();
+
+  const acquireSpy = vi.spyOn(mutex, 'acquire');
+  const releaseMock = vi.fn();
+  acquireSpy.mockResolvedValue(releaseMock);
+
+  // Simultaneously call the function twice
+  const call1 = podmanConfiguration.doUpdateProxySettings(undefined);
+  const call2 = podmanConfiguration.doUpdateProxySettings(proxySettings);
+
+  await Promise.all([call1, call2]);
+
+  // Check that the proxy update was called twice
+  expect(updateProxySettingsMock).toHaveBeenCalledTimes(2);
+
+  // Check that mutex acquire and release were called twice
+  await vi.waitFor(() => expect(acquireSpy).toHaveBeenCalledTimes(2));
+  await vi.waitFor(() => expect(releaseMock).toHaveBeenCalledTimes(2));
+
+  const acquireOrder = acquireSpy.mock.invocationCallOrder;
+  const releaseOrder = releaseMock.mock.invocationCallOrder;
+  const updateProxySettingsOrder = updateProxySettingsMock.mock.invocationCallOrder;
+
+  expect(acquireOrder[0]).toBeLessThan(releaseOrder[0]);
+  expect(acquireOrder[1]).toBeLessThan(releaseOrder[1]);
+  expect(updateProxySettingsOrder[1]).toBeGreaterThan(acquireOrder[0]);
+  expect(updateProxySettingsOrder[0]).toBeLessThan(releaseOrder[0]);
+  expect(acquireOrder[1]).toBeLessThan(updateProxySettingsOrder[1]);
 });
