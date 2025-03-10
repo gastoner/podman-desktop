@@ -1,7 +1,7 @@
 <script lang="ts">
 import { faCircle, faCircleQuestion } from '@fortawesome/free-regular-svg-icons';
-import { faCircleExclamation, faInfo, faTriangleExclamation } from '@fortawesome/free-solid-svg-icons';
-import { Button, type ButtonType } from '@podman-desktop/ui-svelte';
+import { faCircleExclamation, faInfo, faTriangleExclamation, faArrowUpRightFromSquare, faThumbsUp, faThumbsDown } from '@fortawesome/free-solid-svg-icons';
+import { Button, Dropdown, DropdownMenu, Expandable, Input, type ButtonType } from '@podman-desktop/ui-svelte';
 import { onDestroy, onMount } from 'svelte';
 import Fa from 'svelte-fa';
 
@@ -19,6 +19,8 @@ let defaultId: number;
 let buttonOrder: number[];
 
 let display = false;
+
+const githubFeedbackLink = 'https://github.com/podman-desktop/podman-desktop/discussions/10533'
 
 const showMessageBoxCallback = (messageBoxParameter: unknown): void => {
   const options: MessageBoxOptions | undefined = messageBoxParameter as MessageBoxOptions;
@@ -38,6 +40,10 @@ const showMessageBoxCallback = (messageBoxParameter: unknown): void => {
     buttons = ['OK'];
   }
   type = options?.type;
+
+  if (type === 'feedback') {
+    
+  }
 
   buttonOrder = Array.from(buttons, (value, index) => index);
 
@@ -126,19 +132,52 @@ function getButtonType(b: boolean): ButtonType {
     <svelte:fragment slot="content">
       <div class="leading-5 whitespace-pre-wrap" aria-label="Dialog Message">{message}</div>
 
-      {#if detail}
-        <div class="pt-4 leading-5" aria-label="Dialog Details">{detail}</div>
+      {#if type === 'feedback'}
+        <div class="pt-4 " aria-label="Dialog Details">
+          <button onclick={async () => await window.openExternal(githubFeedbackLink)}>
+            <i class="fa-solid fa-thumbs-up fa-3x"></i>
+          </button>
+          <button onclick={async () => await window.openExternal(githubFeedbackLink)}>
+            <i class="fa-solid fa-thumbs-down fa-3x"></i>
+          </button>
+        </div>
+      {:else}
+        {#if detail}
+          <div class="pt-4 leading-5" aria-label="Dialog Details">{detail}</div>
+        {/if}
       {/if}
     </svelte:fragment>
 
     <svelte:fragment slot="buttons">
-      {#each buttonOrder as i}
-        {#if i === cancelId}
-          <Button type="link" aria-label="Cancel" on:click={async (): Promise<void> => await clickButton(i)}>Cancel</Button>
-        {:else}
-          <Button type={getButtonType(defaultId === i)} on:click={async (): Promise<void> => await clickButton(i)}>{buttons[i]}</Button>
-        {/if}
-      {/each}
+      {#if type === 'feedback'}
+      <div class="z-60 overflow-hidden">
+        <Expandable expanded={false}>
+          {#snippet title()}<div class="font-semibold">Remind me later</div>{/snippet}
+          <DropdownMenu.Item title="Remind me tomorrow" onclick={() => {}}/>
+            <DropdownMenu.Item title="Remind me in 2 days" onclick={() => {}}/>
+            <DropdownMenu.Item title="Don't show again" onclick={() => {}}/>
+        </Expandable>
+      </div>
+        
+      <!-- <div class="flex flex-row mb-1 pt-2 text-start items-center justify-start z-10"> -->
+        <Dropdown 
+        class="z-60 overflow-hidden"
+        value="Remind me later"
+      options={[{label: "111", value: 1}, {label: "222", value:2}, {label: "333", value:3}]}
+        />
+      <!-- </div> -->
+          
+        <Button padding="px-3 py-1" icon={faArrowUpRightFromSquare} on:click={async () => await window.openExternal(githubFeedbackLink)}>Share feedback on GitHub</Button>
+      {:else}
+        {#each buttonOrder as i}
+          {#if i === cancelId}
+            <Button type="link" aria-label="Cancel" on:click={async (): Promise<void> => await clickButton(i)}>Cancel</Button>
+          {:else}
+            <Button type={getButtonType(defaultId === i)} on:click={async (): Promise<void> => await clickButton(i)}>{buttons[i]}</Button>
+          {/if}
+        {/each}
+      {/if}
+      
     </svelte:fragment>
   </Dialog>
 {/if}
