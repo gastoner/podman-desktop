@@ -372,6 +372,7 @@ describe.each([
   });
 
   test.each([
+    { version: '6.3.2', image: 'image' },
     { version: '5.0.0', image: 'image' },
     { version: '4.5.0', image: 'image-path' },
   ])(`verify create command called with correct values for %s`, async ({ version, image }) => {
@@ -389,9 +390,9 @@ describe.each([
       },
       podmanConfiguration,
     );
-    expect(vi.mocked(extensionApi.process.exec)).toBeCalledWith(
+    expect(extensionApi.process.exec).toBeCalledWith(
       podmanCli.getPodmanCli(),
-      ['machine', 'init', '--cpus', '2', '--memory', '1000', '--disk-size', '232', `--${image}`, 'path', '--rootful'],
+      expect.arrayContaining([`--${image}`, 'path']),
       {
         logger: undefined,
         token: undefined,

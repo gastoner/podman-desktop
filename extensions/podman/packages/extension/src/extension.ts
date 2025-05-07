@@ -1985,6 +1985,10 @@ export async function deactivate(): Promise<void> {
 
 const PODMAN_MINIMUM_VERSION_FOR_NOW_FLAG_INIT = '4.0.0';
 
+export function isPodman5OrLater(podmanVersion: string): boolean {
+  return compareVersions(podmanVersion, '5.0.0') >= 0;
+}
+
 // Checks if start now flag at machine init is supported.
 export function isStartNowAtMachineInitSupported(podmanVersion: string): boolean {
   return compareVersions(podmanVersion, PODMAN_MINIMUM_VERSION_FOR_NOW_FLAG_INIT) >= 0;
@@ -2205,7 +2209,9 @@ export async function createMachine(
 
   const installedPodman = await getPodmanInstallation();
   const version = installedPodman?.version;
-  const isPodmanV5OrLater = version?.startsWith('5.') ?? false;
+
+  // check for podman major version
+  const isPodmanV5OrLater = version ? isPodman5OrLater(version) : false;
 
   // image
   if (params['podman.factory.machine.image'] && typeof params['podman.factory.machine.image'] === 'string') {
