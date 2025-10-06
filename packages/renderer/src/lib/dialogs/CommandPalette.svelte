@@ -293,6 +293,26 @@ async function onAction(): Promise<void> {
       console.error('Unable to focus input box', error);
     });
 }
+
+function highlightText(
+  text: string | undefined,
+  searchTerm: string | undefined,
+): Array<{ text: string; hasMatch: boolean }> {
+  if (!searchTerm || !text) {
+    return [{ text: text ?? '', hasMatch: false }];
+  }
+
+  const escapedSearchTerm = searchTerm.replace(/[/\\:]/g, '\\$&');
+  const regex = new RegExp(`(${escapedSearchTerm})`, 'gi');
+
+  return text
+    .split(regex)
+    .filter(part => part.length > 0)
+    .map(part => ({
+      text: part,
+      hasMatch: regex.test(part),
+    }));
+}
 </script>
 
 <svelte:window on:keydown={handleKeydown} on:mousedown={handleMousedown} />
@@ -345,6 +365,7 @@ async function onAction(): Promise<void> {
         <ul class="max-h-[50vh] overflow-y-auto flex flex-col mt-1">
           {#each filteredItems as item, i (i)}
             {@const isDocItem = 'category' in item}
+            <!-- {@const isGoToItem = 'kind' in item} -->
             <li class="flex w-full flex-row" bind:this={scrollElements[i]} aria-label={item.id}>
               <button
                 onclick={(): Promise<void> => clickOnItem(i)}
@@ -355,9 +376,29 @@ async function onAction(): Promise<void> {
                   <div class="flex flex-row w-full max-w-[700px] truncate">
                     <div class="text-base py-[2pt]">
                       {#if isDocItem}
-                        {(item as DocumentationInfo).category}: {(item as DocumentationInfo).name}
+                        {#each highlightText(`${(item as DocumentationInfo).category}: ${(item as DocumentationInfo).name}`, inputValue) as part, i (i)}
+                          {#if part.hasMatch}
+                            <span class="text-[var(--pd-label-primary-text)] font-semibold">{part.text}</span>
+                          {:else}
+                            {part.text}
+                          {/if}
+                        {/each}
+                      <!-- {:else if isGoToItem}
+                        {#each highlightText((item as GoToInfo).name, inputValue) as part, i (i)}
+                          {#if part.hasMatch}
+                            <span class="text-[var(--pd-label-primary-text)] font-semibold">{part.text}</span>
+                          {:else}
+                            {part.text}
+                          {/if}
+                        {/each} -->
                       {:else}
-                        {(item as CommandInfo).title}
+                        {#each highlightText((item as CommandInfo).title, inputValue) as part, i (i)}
+                          {#if part.hasMatch}
+                            <span class="text-[var(--pd-label-primary-text)] font-semibold">{part.text}</span>
+                          {:else}
+                            {part.text}
+                          {/if}
+                        {/each}
                       {/if}
                     </div>
                   </div>
