@@ -273,59 +273,51 @@ async function executeAction(index: number): Promise<void> {
   const item = filteredItems[index];
   if (!item) return;
 
-  // Check if it's a documentation item by checking for 'category' property
-  const isDocItem = 'category' in item;
-  const isGoToItem = 'type' in item;
-
-  if (isDocItem) {
+  if (isDocItem(item)) {
     // Documentation item
-    const docItem = item as DocumentationInfo;
-    if (docItem.url) {
+    if (item.url) {
       try {
-        await window.openExternal(docItem.url);
+        await window.openExternal(item.url);
       } catch (error) {
         console.error('Error opening documentation URL', error);
       }
     }
-  } else if (isGoToItem) {
+  } else if (isGoToItem(item)) {
     // Go to item
-    const goToItem = item as GoToInfo;
-
-    if (goToItem.type === 'Image') {
-      const repoTag = goToItem.RepoTags?.[0] ?? goToItem.Id;
+    if (item.type === 'Image') {
+      const repoTag = item.RepoTags?.[0] ?? item.Id;
       handleNavigation({
         page: NavigationPage.IMAGE,
         parameters: {
-          id: goToItem.Id,
-          engineId: goToItem.engineId,
+          id: item.Id,
+          engineId: item.engineId,
           tag: repoTag,
         },
       });
-    } else if (goToItem.type === 'Container') {
+    } else if (item.type === 'Container') {
       handleNavigation({
         page: NavigationPage.CONTAINER_SUMMARY,
-        parameters: { id: goToItem.Id },
+        parameters: { id: item.Id },
       });
-    } else if (goToItem.type === 'Pod') {
+    } else if (item.type === 'Pod') {
       handleNavigation({
         page: NavigationPage.PODMAN_POD_SUMMARY,
         parameters: {
-          name: goToItem.Name,
-          engineId: goToItem.engineId,
+          name: item.Name,
+          engineId: item.engineId,
         },
       });
-    } else if (goToItem.type === 'Volume') {
+    } else if (item.type === 'Volume') {
       handleNavigation({
         page: NavigationPage.VOLUME,
-        parameters: { name: goToItem.Name, engineId: goToItem.engineId },
+        parameters: { name: item.Name, engineId: item.engineId },
       });
     }
   } else {
     // Command item
-    const commandItem = item as CommandInfo;
-    if (commandItem.id) {
+    if (item.id) {
       try {
-        await window.executeCommand(commandItem.id);
+        await window.executeCommand(item.id);
       } catch (error) {
         console.error('error executing command', error);
       }
@@ -371,6 +363,14 @@ async function onAction(): Promise<void> {
     .catch((error: unknown) => {
       console.error('Unable to focus input box', error);
     });
+}
+
+function isGoToItem(item: CommandInfo | DocumentationInfo | GoToInfo): item is GoToInfo {
+  return 'type' in item;
+}
+
+function isDocItem(item: CommandInfo | DocumentationInfo | GoToInfo): item is DocumentationInfo {
+  return 'category' in item;
 }
 </script>
 
@@ -423,9 +423,9 @@ async function onAction(): Promise<void> {
         </div>
         <ul class="max-h-[50vh] overflow-y-auto flex flex-col mt-1">
           {#each filteredItems as item, i (i)}
-            {@const isDocItem = 'category' in item}
-            {@const isGoToItem = 'type' in item}
-            <li class="flex w-full flex-row" bind:this={scrollElements[i]} aria-label={isGoToItem ? getGoToDisplayText(item as GoToInfo) : (item as CommandInfo | DocumentationInfo).id}>
+            {@const docItem = isDocItem(item)}
+            {@const goToItem = isGoToItem(item)}
+            <li class="flex w-full flex-row" bind:this={scrollElements[i]} aria-label={goToItem ? getGoToDisplayText(item) : (item.id)}>
               <button
                 onclick={(): Promise<void> => clickOnItem(i)}
                 class="text-[var(--pd-dropdown-item-text)] text-left relative w-full rounded-sm {i === selectedFilteredIndex
@@ -434,13 +434,12 @@ async function onAction(): Promise<void> {
                 <div class="flex flex-col w-full">
                   <div class="flex flex-row w-full max-w-[700px] truncate">
                     <div class="text-base py-[2pt]">
-                      {#if isDocItem}
-                        {(item as DocumentationInfo).category}: {(item as DocumentationInfo).name}
-                       {:else if isGoToItem}
-                         {@const goToInfo = item as GoToInfo}
-                         {(goToInfo.type)}: {(getGoToDisplayText(goToInfo))}
+                      {#if docItem}
+                        {(item.category)}: {(item.name)}
+                       {:else if goToItem}
+                         {(item.type)}: {(getGoToDisplayText(item))}
                       {:else}
-                        {(item as CommandInfo).title}
+                        {(item.title)}
                       {/if}
                     </div>
                   </div>
