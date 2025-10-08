@@ -3,8 +3,7 @@ import { faChevronRight, faMagnifyingGlass } from '@fortawesome/free-solid-svg-i
 import type { ImageInfo, PodInfo } from '@podman-desktop/api';
 import { Button, Input } from '@podman-desktop/ui-svelte';
 import { Icon } from '@podman-desktop/ui-svelte/icons';
-import { onDestroy, onMount, tick } from 'svelte';
-import type { Unsubscriber } from 'svelte/store';
+import { onMount, tick } from 'svelte';
 
 import { handleNavigation } from '/@/navigation';
 import { commandsInfos } from '/@/stores/commands';
@@ -69,15 +68,15 @@ let searchOptions: SearchOption[] = $derived([
   { text: 'Go to', shortCut: [`${modifierC}F`] },
 ]);
 let searchOptionsSelectedIndex: number = $state(0);
-let imageItems: ImageInfo[] = $state([]);
-let containerItems: ContainerInfo[] = $state([]);
-let podItems: PodInfo[] = $state([]);
-let volumeItems: VolumeInfo[] = $state([]);
+let imageItems: ImageInfo[] = $derived($imagesInfos);
+let containerItems: ContainerInfo[] = $derived($containersInfos);
+let podItems: PodInfo[] = $derived($podsInfos);
+let volumeItems: VolumeInfo[] = $derived($volumeListInfos.map(info => info.Volumes).flat());
 
-let commandInfoItems: CommandInfo[] = $state([]);
+let commandInfoItems: CommandInfo[] = $derived($commandsInfos);
 let documentationItems: DocumentationInfo[] = $state([]);
 let goToItems: GoToInfo[] = $derived(createGoToItems(imageItems, containerItems, podItems, volumeItems));
-let globalContext: ContextUI;
+let globalContext: ContextUI = $derived($context);
 
 // Keep backward compatibility with existing variable name
 let filteredCommandInfoItems: CommandInfo[] = $derived(
@@ -121,47 +120,11 @@ let filteredItems = $derived.by(() => {
     return [...filteredCommandInfoItems, ...filteredDocumentationInfoItems, ...filteredGoToItems];
   }
 });
-let contextsUnsubscribe: Unsubscriber;
-let imagesUnsubscribe: Unsubscriber;
-let containersUnsubscribe: Unsubscriber;
-let podsUnsubscribe: Unsubscriber;
-let volumeListUnsubscribe: Unsubscriber;
 
 onMount(async () => {
   const platform = await window.getOsPlatform();
   isMac = platform === 'darwin';
   documentationItems = await window.getDocumentationItems();
-});
-
-onMount(() => {
-  contextsUnsubscribe = context.subscribe(value => {
-    globalContext = value;
-  });
-
-  imagesUnsubscribe = imagesInfos.subscribe(infos => {
-    imageItems = infos;
-  });
-  containersUnsubscribe = containersInfos.subscribe(infos => {
-    containerItems = infos;
-  });
-  podsUnsubscribe = podsInfos.subscribe(infos => {
-    podItems = infos;
-  });
-  volumeListUnsubscribe = volumeListInfos.subscribe(infos => {
-    volumeItems = infos.map(info => info.Volumes).flat();
-  });
-  // subscribe to the commands
-  return commandsInfos.subscribe(infos => {
-    commandInfoItems = infos;
-  });
-});
-
-onDestroy(() => {
-  contextsUnsubscribe?.();
-  imagesUnsubscribe?.();
-  containersUnsubscribe?.();
-  podsUnsubscribe?.();
-  volumeListUnsubscribe?.();
 });
 
 // Focus the input when the command palette becomes visible
@@ -273,59 +236,51 @@ async function executeAction(index: number): Promise<void> {
   const item = filteredItems[index];
   if (!item) return;
 
-  // Check if it's a documentation item by checking for 'category' property
-  const isDocItem = 'category' in item;
-  const isGoToItem = 'type' in item;
-
-  if (isDocItem) {
+  if (isDocItem(item)) {
     // Documentation item
-    const docItem = item as DocumentationInfo;
-    if (docItem.url) {
+    if (item.url) {
       try {
-        await window.openExternal(docItem.url);
+        await window.openExternal(item.url);
       } catch (error) {
         console.error('Error opening documentation URL', error);
       }
     }
-  } else if (isGoToItem) {
+  } else if (isGoToItem(item)) {
     // Go to item
-    const goToItem = item as GoToInfo;
-
-    if (goToItem.type === 'Image') {
-      const repoTag = goToItem.RepoTags?.[0] ?? goToItem.Id;
+    if (item.type === 'Image') {
+      const repoTag = item.RepoTags?.[0] ?? item.Id;
       handleNavigation({
         page: NavigationPage.IMAGE,
         parameters: {
-          id: goToItem.Id,
-          engineId: goToItem.engineId,
+          id: item.Id,
+          engineId: item.engineId,
           tag: repoTag,
         },
       });
-    } else if (goToItem.type === 'Container') {
+    } else if (item.type === 'Container') {
       handleNavigation({
         page: NavigationPage.CONTAINER_SUMMARY,
-        parameters: { id: goToItem.Id },
+        parameters: { id: item.Id },
       });
-    } else if (goToItem.type === 'Pod') {
+    } else if (item.type === 'Pod') {
       handleNavigation({
         page: NavigationPage.PODMAN_POD_SUMMARY,
         parameters: {
-          name: goToItem.Name,
-          engineId: goToItem.engineId,
+          name: item.Name,
+          engineId: item.engineId,
         },
       });
-    } else if (goToItem.type === 'Volume') {
+    } else if (item.type === 'Volume') {
       handleNavigation({
         page: NavigationPage.VOLUME,
-        parameters: { name: goToItem.Name, engineId: goToItem.engineId },
+        parameters: { name: item.Name, engineId: item.engineId },
       });
     }
   } else {
     // Command item
-    const commandItem = item as CommandInfo;
-    if (commandItem.id) {
+    if (item.id) {
       try {
-        await window.executeCommand(commandItem.id);
+        await window.executeCommand(item.id);
       } catch (error) {
         console.error('error executing command', error);
       }
@@ -371,6 +326,14 @@ async function onAction(): Promise<void> {
     .catch((error: unknown) => {
       console.error('Unable to focus input box', error);
     });
+}
+
+function isGoToItem(item: CommandInfo | DocumentationInfo | GoToInfo): item is GoToInfo {
+  return 'type' in item;
+}
+
+function isDocItem(item: CommandInfo | DocumentationInfo | GoToInfo): item is DocumentationInfo {
+  return 'category' in item;
 }
 </script>
 
@@ -423,9 +386,9 @@ async function onAction(): Promise<void> {
         </div>
         <ul class="max-h-[50vh] overflow-y-auto flex flex-col mt-1">
           {#each filteredItems as item, i (i)}
-            {@const isDocItem = 'category' in item}
-            {@const isGoToItem = 'type' in item}
-            <li class="flex w-full flex-row" bind:this={scrollElements[i]} aria-label={isGoToItem ? getGoToDisplayText(item as GoToInfo) : (item as CommandInfo | DocumentationInfo).id}>
+            {@const docItem = isDocItem(item)}
+            {@const goToItem = isGoToItem(item)}
+            <li class="flex w-full flex-row" bind:this={scrollElements[i]} aria-label={goToItem ? getGoToDisplayText(item) : (item.id)}>
               <button
                 onclick={(): Promise<void> => clickOnItem(i)}
                 class="text-[var(--pd-dropdown-item-text)] text-left relative w-full rounded-sm {i === selectedFilteredIndex
@@ -434,13 +397,12 @@ async function onAction(): Promise<void> {
                 <div class="flex flex-col w-full">
                   <div class="flex flex-row w-full max-w-[700px] truncate">
                     <div class="text-base py-[2pt]">
-                      {#if isDocItem}
-                        {(item as DocumentationInfo).category}: {(item as DocumentationInfo).name}
-                       {:else if isGoToItem}
-                         {@const goToInfo = item as GoToInfo}
-                         {(goToInfo.type)}: {(getGoToDisplayText(goToInfo))}
+                      {#if docItem}
+                        {(item.category)}: {(item.name)}
+                       {:else if goToItem}
+                         {(item.type)}: {(getGoToDisplayText(item))}
                       {:else}
-                        {(item as CommandInfo).title}
+                        {(item.title)}
                       {/if}
                     </div>
                   </div>
