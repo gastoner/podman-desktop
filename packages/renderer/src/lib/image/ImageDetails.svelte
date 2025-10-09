@@ -97,10 +97,10 @@ $effect(() => {
 {#if image}
   <DetailsPage title={image.name} titleDetail={image.shortId} subtitle={image.tag} bind:this={detailsPage}>
     {#snippet iconSnippet()}
-      {#if image}<StatusIcon icon={image.icon} size={24} status={image.status} />{/if}
+      <StatusIcon icon={image.icon} size={24} status={image.status} />
     {/snippet}
     {#snippet subtitleSnippet()}
-      {#if image?.badges.length}
+      {#if image.badges.length}
         <div class="flex flex-row">
           {#each image.badges as badge, index (index)}
             <Badge color={badge.color} label={badge.label} />
@@ -109,16 +109,13 @@ $effect(() => {
       {/if}
     {/snippet}
     {#snippet actionsSnippet()}
-      {#if image}
-        <ImageActions
-          image={image}
-          onPushImage={handlePushImageModal}
-          onRenameImage={handleRenameImageModal}
-          detailed={true}
-          dropdownMenu={false}
-          groupContributions={true}
-          on:update={(): ImageInfoUI | undefined => (image = image)} />
-      {/if}
+      <ImageActions
+        image={image}
+        onPushImage={handlePushImageModal}
+        onRenameImage={handleRenameImageModal}
+        detailed={true}
+        dropdownMenu={false}
+        groupContributions={true} />
     {/snippet}
     {#snippet tabsSnippet()}
       <Tab title="Summary" selected={isTabSelected($router.path, 'summary')} url={getTabUrl($router.path, 'summary')} />
@@ -132,23 +129,21 @@ $effect(() => {
       {/if}
     {/snippet}
     {#snippet contentSnippet()}
-      {#if image}
-        <Route path="/summary" breadcrumb="Summary" navigationHint="tab">
-          <ImageDetailsSummary image={image} />
-        </Route>
-        <Route path="/history" breadcrumb="History" navigationHint="tab">
-          <ImageDetailsHistory image={image} />
-        </Route>
-        <Route path="/inspect" breadcrumb="Inspect" navigationHint="tab">
-          <ImageDetailsInspect image={image} />
-        </Route>
-        <Route path="/check" breadcrumb="Check" navigationHint="tab">
-          <ImageDetailsCheck imageInfo={imageInfo} />
-        </Route>
-        <Route path="/files" breadcrumb="Files" navigationHint="tab">
-          <ImageDetailsFiles imageInfo={imageInfo} />
-        </Route>
-      {/if}
+      <Route path="/summary" breadcrumb="Summary" navigationHint="tab">
+        <ImageDetailsSummary image={image} />
+      </Route>
+      <Route path="/history" breadcrumb="History" navigationHint="tab">
+        <ImageDetailsHistory image={image} />
+      </Route>
+      <Route path="/inspect" breadcrumb="Inspect" navigationHint="tab">
+        <ImageDetailsInspect image={image} />
+      </Route>
+      <Route path="/check" breadcrumb="Check" navigationHint="tab">
+        <ImageDetailsCheck imageInfo={imageInfo} />
+      </Route>
+      <Route path="/files" breadcrumb="Files" navigationHint="tab">
+        <ImageDetailsFiles imageInfo={imageInfo} />
+      </Route>
     {/snippet}
   </DetailsPage>
 
