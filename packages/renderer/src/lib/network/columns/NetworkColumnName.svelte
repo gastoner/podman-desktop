@@ -1,4 +1,6 @@
 <script lang="ts">
+import { openDetailsNetwork } from '/@/lib/network/network-utils';
+
 import type { NetworkInfoUI } from '../NetworkInfoUI';
 
 interface Props {
@@ -10,6 +12,6 @@ let { object }: Props = $props();
 
 <button
   class="hover:cursor-pointer flex text-[var(--pd-table-body-text-highlight)] max-w-full overflow-hidden text-ellipsis"
-  >
+  onclick={(): void => openDetailsNetwork(object)}>
   {object.name}
 </button>
