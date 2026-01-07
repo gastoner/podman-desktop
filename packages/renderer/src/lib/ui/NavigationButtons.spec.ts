@@ -46,6 +46,7 @@ beforeEach(() => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
 
   vi.mocked(window.telemetryTrack).mockResolvedValue(undefined);
+  vi.mocked(window.getOsPlatform).mockResolvedValue('linux');
 
   // Reset navigation history state
   vi.mocked(navigationHistory).stack = [];
@@ -242,6 +243,92 @@ describe('mouse button navigation', () => {
     // Simulate mouse button 4 (forward)
     const mouseUpEvent = new MouseEvent('mouseup', { button: 4 });
     window.dispatchEvent(mouseUpEvent);
+
+    expect(goForwardMock).toHaveBeenCalled();
+  });
+});
+
+describe('keyboard navigation - Windows/Linux', () => {
+  test('Alt+Left should trigger goBack', async () => {
+    render(NavigationButtons);
+    await tick();
+
+    const keydownEvent = new KeyboardEvent('keydown', {
+      key: 'ArrowLeft',
+      altKey: true,
+    });
+    window.dispatchEvent(keydownEvent);
+
+    expect(goBackMock).toHaveBeenCalled();
+  });
+
+  test('Alt+Right should trigger goForward', async () => {
+    render(NavigationButtons);
+    await tick();
+
+    const keydownEvent = new KeyboardEvent('keydown', {
+      key: 'ArrowRight',
+      altKey: true,
+    });
+    window.dispatchEvent(keydownEvent);
+
+    expect(goForwardMock).toHaveBeenCalled();
+  });
+});
+
+describe('keyboard navigation - macOS', () => {
+  test('Cmd+[ should trigger goBack', async () => {
+    vi.mocked(window.getOsPlatform).mockResolvedValue('darwin');
+    render(NavigationButtons);
+    await tick();
+
+    const keydownEvent = new KeyboardEvent('keydown', {
+      key: '[',
+      metaKey: true,
+    });
+    window.dispatchEvent(keydownEvent);
+
+    expect(goBackMock).toHaveBeenCalled();
+  });
+
+  test('Cmd+] should trigger goForward', async () => {
+    vi.mocked(window.getOsPlatform).mockResolvedValue('darwin');
+    render(NavigationButtons);
+    await tick();
+
+    const keydownEvent = new KeyboardEvent('keydown', {
+      key: ']',
+      metaKey: true,
+    });
+    window.dispatchEvent(keydownEvent);
+
+    expect(goForwardMock).toHaveBeenCalled();
+  });
+
+  test('Cmd+Left should trigger goBack', async () => {
+    vi.mocked(window.getOsPlatform).mockResolvedValue('darwin');
+    render(NavigationButtons);
+    await tick();
+
+    const keydownEvent = new KeyboardEvent('keydown', {
+      key: 'ArrowLeft',
+      metaKey: true,
+    });
+    window.dispatchEvent(keydownEvent);
+
+    expect(goBackMock).toHaveBeenCalled();
+  });
+
+  test('Cmd+Right should trigger goForward', async () => {
+    vi.mocked(window.getOsPlatform).mockResolvedValue('darwin');
+    render(NavigationButtons);
+    await tick();
+
+    const keydownEvent = new KeyboardEvent('keydown', {
+      key: 'ArrowRight',
+      metaKey: true,
+    });
+    window.dispatchEvent(keydownEvent);
 
     expect(goForwardMock).toHaveBeenCalled();
   });
