@@ -153,6 +153,38 @@ test('expect env PROD to be truthy', () => {
   expect(import.meta.env.PROD).toBeTruthy();
 });
 
+test('expect to check for updates when env AIRGAP_DOWNLOAD is not set', () => {
+  const updater = new Updater(
+    messageBoxMock,
+    configurationRegistryMock,
+    statusBarRegistryMock,
+    commandRegistryMock,
+    taskManagerMock,
+    apiSenderMock,
+  );
+  updater.init();
+  expect(autoUpdater.checkForUpdates).toHaveBeenCalled();
+});
+
+test.each([
+  'windows',
+  'macos',
+])('expect to not check for updates when env AIRGAP_DOWNLOAD is set on $platform', platform => {
+  vi.mocked(isWindows).mockReturnValue(platform === 'windows');
+  vi.mocked(isMac).mockReturnValue(platform === 'macos');
+  vi.stubEnv('AIRGAP_DOWNLOAD', 'true');
+  const updater = new Updater(
+    messageBoxMock,
+    configurationRegistryMock,
+    statusBarRegistryMock,
+    commandRegistryMock,
+    taskManagerMock,
+    apiSenderMock,
+  );
+  updater.init();
+  expect(autoUpdater.checkForUpdates).not.toHaveBeenCalled();
+});
+
 test('expect init to provide a disposable', () => {
   const updater = new Updater(
     messageBoxMock,

@@ -36,7 +36,7 @@ import { MessageBox } from '/@/plugin/message-box.js';
 import { StatusBarRegistry } from '/@/plugin/statusbar/statusbar-registry.js';
 import type { Task } from '/@/plugin/tasks/tasks.js';
 import { Disposable } from '/@/plugin/types/disposable.js';
-import { isLinux, isWindows } from '/@/util.js';
+import { isLinux, isMac, isWindows } from '/@/util.js';
 import { ApiSenderType } from '/@api/api-sender/api-sender-type.js';
 import type { ReleaseNotesInfo } from '/@api/release-notes-info.js';
 
@@ -458,7 +458,8 @@ export class Updater {
     this.registerDefaultCommands();
 
     // Only check on production builds for Windows and macOS users
-    if (!import.meta.env.PROD || isLinux()) {
+    // Skip update checks if AIRGAP_DOWNLOAD is set on Windows or macOS
+    if (!import.meta.env.PROD || isLinux() || ((isMac() || isWindows()) && process.env['AIRGAP_DOWNLOAD'])) {
       this.defaultVersionEntry();
       return Disposable.noop();
     }
