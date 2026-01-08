@@ -3,6 +3,7 @@ import { onMount } from 'svelte';
 
 import CommandPalette from '/@/lib/dialogs/CommandPalette.svelte';
 import DesktopIcon from '/@/lib/images/DesktopIcon.svelte';
+import NavigationButtons from '/@/lib/ui/NavigationButtons.svelte';
 import WindowControlButtons from '/@/lib/window-control-buttons/ControlButtons.svelte';
 
 import SearchButton from './SearchButton.svelte';
@@ -38,6 +39,9 @@ function closeCommandPalette(): void {
         <div class="absolute left-[10px] top-[10px]">
           <DesktopIcon size="18" />
         </div>
+        <div class="absolute left-[42px] top-1/2 -translate-y-1/2">
+          <NavigationButtons />
+        </div>
         <SearchButton onclick={openCommandPalette}/>
         <WindowControlButtons platform={platform} />
       </div>
@@ -46,11 +50,17 @@ function closeCommandPalette(): void {
         <div class="absolute left-[7px] top-[7px]">
           <DesktopIcon size="20" />
         </div>
+        <div class="absolute left-[42px] top-1/2 -translate-y-1/2">
+          <NavigationButtons />
+        </div>
         <SearchButton onclick={openCommandPalette}/>
         <div class="ml-[35px] text-left text-base leading-3 text-[color:var(--pd-titlebar-text)]">{title}</div>
         <WindowControlButtons platform={platform} />
       </div>
     {:else if platform === 'darwin'}
+      <div class="absolute left-[90px] top-1/2 -translate-y-1/2">
+        <NavigationButtons />
+      </div>
       <SearchButton onclick={openCommandPalette}/>
     {/if}
     <CommandPalette display={commandPaletteVisible} onclose={closeCommandPalette}/>
