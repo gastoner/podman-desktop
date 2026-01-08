@@ -102,10 +102,7 @@ describe('click navigation', () => {
     render(NavigationButtons);
 
     const backButton = screen.getByTitle('Back (hold for history)');
-
-    // Simulate mousedown then mouseup (short click)
-    await fireEvent.mouseDown(backButton, { button: 0 });
-    await fireEvent.mouseUp(backButton);
+    await fireEvent.click(backButton);
 
     expect(goBackMock).toHaveBeenCalled();
   });
@@ -117,10 +114,7 @@ describe('click navigation', () => {
     render(NavigationButtons);
 
     const forwardButton = screen.getByTitle('Forward (hold for history)');
-
-    // Simulate mousedown then mouseup (short click)
-    await fireEvent.mouseDown(forwardButton, { button: 0 });
-    await fireEvent.mouseUp(forwardButton);
+    await fireEvent.click(forwardButton);
 
     expect(goForwardMock).toHaveBeenCalled();
   });
