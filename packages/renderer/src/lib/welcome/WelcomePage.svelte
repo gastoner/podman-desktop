@@ -7,6 +7,7 @@ import IconImage from '/@/lib/appearance/IconImage.svelte';
 import DesktopIcon from '/@/lib/images/DesktopIcon.svelte';
 import { onboardingList } from '/@/stores/onboarding';
 import { providerInfos } from '/@/stores/providers';
+import type { WelcomeMessages } from '/@api/welcome-info';
 
 import bgImage from './background.png';
 import { WelcomeUtils } from './welcome-utils';
@@ -46,6 +47,8 @@ let onboardingProviders = $derived(
     })
     .sort((a, b) => Number(b.containerEngine) - Number(a.containerEngine)),
 ); // Sort by containerEngine (true first)
+
+let welcomeMessages: WelcomeMessages = $derived(await window.getWelcomeMessages());
 
 onMount(async () => {
   const ver = await welcomeUtils.getVersion();
@@ -98,14 +101,14 @@ function startOnboardingQueue(): void {
     style="background-image: url({bgImage}); background-position: 50% -175%; background-size: 100% 75%">
     <!-- Header -->
     <div class="flex flex-row flex-none backdrop-blur-sm p-6 mt-10">
-      <div class="flex flex-auto text-lg font-bold">Get started with Podman Desktop</div>
+      <div class="flex flex-auto text-lg font-bold">{welcomeMessages.getStartedMessage}</div>
     </div>
 
     <!-- Body -->
     <div class="flex flex-col justify-center content-center flex-auto backdrop-blur-sm p-2 overflow-y-auto">
       <div class="flex justify-center p-2"><DesktopIcon /></div>
       <div class="flex justify-center text-lg font-bold p-2">
-        <span class="mr-2">🎉</span>Welcome to Podman Desktop v{podmanDesktopVersion} !
+        <span class="mr-2">🎉</span>{welcomeMessages.welcomeMessage} v{podmanDesktopVersion} !
       </div>
       <div class="flex flex-row justify-center">
         <div class="bg-[var(--pd-content-card-inset-bg)] px-4 pb-4 pt-2 rounded-sm">
