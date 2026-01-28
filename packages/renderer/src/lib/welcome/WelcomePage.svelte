@@ -7,6 +7,7 @@ import IconImage from '/@/lib/appearance/IconImage.svelte';
 import DesktopIcon from '/@/lib/images/DesktopIcon.svelte';
 import { onboardingList } from '/@/stores/onboarding';
 import { providerInfos } from '/@/stores/providers';
+import type { OnboardingInfo } from '/@api/onboarding';
 
 import bgImage from './background.png';
 import { WelcomeUtils } from './welcome-utils';
@@ -20,6 +21,12 @@ let { showWelcome = false, showTelemetry = false }: Props = $props();
 
 const welcomeUtils = new WelcomeUtils();
 
+// Extend ProviderInfo to have a selected property
+interface OnboardingInfoWithAdditionalInfo extends OnboardingInfo {
+  selected?: boolean;
+  containerEngine?: boolean;
+}
+
 let telemetry = $state(true);
 let telemetryMessages = $derived(await window.getTelemetryMessages());
 let podmanDesktopVersion: string = $derived(await window.getPodmanDesktopVersion());
@@ -31,7 +38,7 @@ let providersWithContainerConnections = $derived(
 // Using providerInfos as well as the information we have from onboarding,
 // we will by default auto-select as well as add containerEngine to the list as true/false
 // so we can make sure that extensions with container engines are listed first
-let onboardingProviders = $derived(
+let onboardingProviders: OnboardingInfoWithAdditionalInfo[] = $derived(
   $onboardingList
     .map(provider => {
       // Check if it's in the list, if it is, then it has a container engine
