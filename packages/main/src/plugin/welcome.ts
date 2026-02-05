@@ -1,5 +1,5 @@
 /**********************************************************************
- * Copyright (C) 2023-2025 Red Hat, Inc.
+ * Copyright (C) 2026 Red Hat, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,23 +15,20 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  ***********************************************************************/
+import { injectable } from 'inversify';
 
-import { afterEach, expect, test, vi } from 'vitest';
+import { WelcomeMessages } from '/@api/welcome-info.js';
+import productJSONFile from '/@product.json' with { type: 'json' };
 
-import { getSocketCompatibility } from './compatibility-mode';
+@injectable()
+export class Welcome {
+  constructor() {}
 
-afterEach(() => {
-  vi.resetAllMocks();
-  vi.restoreAllMocks();
-});
-
-// Windows tests
-test('windows: compatibility mode fail', async () => {
-  // Mock platform to be darwin
-  Object.defineProperty(process, 'platform', {
-    value: 'win32',
-  });
-
-  // Expect getSocketCompatibility to return error since Linux is not supported yet
-  expect(() => getSocketCompatibility()).toThrowError();
-});
+  getWelcomeMessages(): WelcomeMessages {
+    const productName = productJSONFile.name;
+    return {
+      getStartedMessage: `Get started with ${productName}`,
+      welcomeMessage: `Welcome to ${productName}`,
+    };
+  }
+}

@@ -85,7 +85,12 @@ import type { ImageFilesInfo } from '/@api/image-files-info';
 import type { ImageFilesystemLayersUI } from '/@api/image-filesystem-layers';
 import type { ImageInfo, PodmanListImagesOptions } from '/@api/image-info';
 import type { ImageInspectInfo } from '/@api/image-inspect-info';
-import type { ImageSearchOptions, ImageSearchResult, ImageTagsListOptions } from '/@api/image-registry';
+import type {
+  ImageSearchOptions,
+  ImageSearchResult,
+  ImageTagsListOptions,
+  ImageUpdateStatus,
+} from '/@api/image-registry';
 import type {
   GenerateKubeResult,
   KubernetesGeneratorArgument,
@@ -130,6 +135,7 @@ import type { TelemetryMessages } from '/@api/telemetry';
 import type { ViewInfoUI } from '/@api/view-info';
 import type { VolumeInspectInfo, VolumeListInfo } from '/@api/volume-info';
 import type { WebviewInfo } from '/@api/webview-info';
+import type { WelcomeMessages } from '/@api/welcome-info';
 
 export type DialogResultCallback = (openDialogReturnValue: Electron.OpenDialogReturnValue) => void;
 export type OpenSaveDialogResultCallback = (result: string | string[] | undefined) => void;
@@ -584,9 +590,9 @@ export function initExposure(): void {
   });
 
   contextBridge.exposeInMainWorld(
-    'updateImage',
-    async (engineId: string, imageId: string, tag: string): Promise<void> => {
-      return ipcInvoke('container-provider-registry:updateImage', engineId, imageId, tag);
+    'checkImageUpdateStatus',
+    async (imageReference: string, imageTag: string, localDigests: string[]): Promise<ImageUpdateStatus> => {
+      return ipcInvoke('image-registry:checkImageUpdateStatus', imageReference, imageTag, localDigests);
     },
   );
 
@@ -1684,6 +1690,10 @@ export function initExposure(): void {
 
   contextBridge.exposeInMainWorld('listExtensions', async (): Promise<ExtensionInfo[]> => {
     return ipcInvoke('extension-loader:listExtensions');
+  });
+
+  contextBridge.exposeInMainWorld('getWelcomeMessages', async (): Promise<WelcomeMessages> => {
+    return ipcInvoke('welcome:getWelcomeMessages');
   });
 
   contextBridge.exposeInMainWorld('stopExtension', async (extensionId: string): Promise<void> => {
