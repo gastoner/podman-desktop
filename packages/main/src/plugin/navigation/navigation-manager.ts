@@ -76,6 +76,12 @@ export class NavigationManager {
     );
 
     this.#disposables.push(
+      this.commandRegistry.registerCommand('navigateToResources', async () => {
+        await this.navigateToResources();
+      }),
+    );
+
+    this.#disposables.push(
       this.commandRegistry.registerCommandPalette(
         {
           command: 'navigation.goBack',
