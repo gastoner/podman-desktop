@@ -16,11 +16,10 @@
  * SPDX-License-Identifier: Apache-2.0
  ***********************************************************************/
 
+import { ENHANCED_DASHBOARD_CONFIGURATION_KEY } from '@podman-desktop/core-api';
+import { ApiSenderType } from '@podman-desktop/core-api/api-sender';
+import { type IConfigurationNode, IConfigurationRegistry } from '@podman-desktop/core-api/configuration';
 import { inject, injectable } from 'inversify';
-
-import { ApiSenderType } from '/@api/api-sender/api-sender-type.js';
-import { type IConfigurationNode, IConfigurationRegistry } from '/@api/configuration/models.js';
-import { ENHANCED_DASHBOARD_CONFIGURATION_KEY } from '/@api/dashboard-info.js';
 
 @injectable()
 export class DashboardService {

@@ -15,13 +15,12 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  ***********************************************************************/
+import { ENHANCED_DASHBOARD_CONFIGURATION_KEY } from '@podman-desktop/core-api';
+import type { ApiSenderType } from '@podman-desktop/core-api/api-sender';
 import { expect, test, vi } from 'vitest';
 
+import type { ConfigurationRegistry } from '/@/plugin/configuration-registry.js';
 import { DashboardService } from '/@/plugin/dashboard/dashboard-service.js';
-import type { ApiSenderType } from '/@api/api-sender/api-sender-type.js';
-import { ENHANCED_DASHBOARD_CONFIGURATION_KEY } from '/@api/dashboard-info.js';
-
-import type { ConfigurationRegistry } from '../configuration-registry.js';
 
 const registerConfigurationsMock = vi.fn();
 const onDidChangeConfigurationMock = vi.fn();
