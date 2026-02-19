@@ -27,6 +27,7 @@ export * from './container-inspect-info.js';
 export * from './container-stats-info.js';
 export * from './containerfile-info.js';
 export * from './contribution-info.js';
+export * from './dashboard-info.js';
 export * from './dialog.js';
 export * from './disposable.js';
 export * from './disposable-group.js';
