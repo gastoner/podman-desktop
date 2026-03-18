@@ -139,4 +139,114 @@ describe('system overview status', () => {
       text: 'Some systems are stopped',
     });
   });
+
+  test('should send progressing status when connection status is unknown', () => {
+    const connection: ProviderContainerConnectionInfo = {
+      connectionType: 'container',
+      name: 'podman-machine',
+      displayName: 'Podman Machine',
+      status: 'unknown',
+      endpoint: { socketPath: '/run/podman/podman.sock' },
+      type: 'podman',
+    };
+    const provider: ProviderInfo = {
+      internalId: 'id',
+      id: 'podman',
+      extensionId: 'podman',
+      name: 'Podman',
+      containerConnections: [connection],
+      kubernetesConnections: [],
+      vmConnections: [],
+      status: 'ready',
+    } as unknown as ProviderInfo;
+    getProviderInfosMock.mockReturnValue([provider]);
+
+    const providerListener = vi.mocked(providerRegistryMock.addProviderListener).mock.calls[0]?.[0];
+    providerListener?.('provider:update-status', provider);
+
+    expect(apiSenderMock.send).toHaveBeenCalledWith('dashboard:system-overview-status', {
+      status: 'progressing',
+      text: 'Starting up...',
+    });
+  });
+
+  test('should send critical status when provider has error status', () => {
+    const connection: ProviderContainerConnectionInfo = {
+      connectionType: 'container',
+      name: 'podman-machine',
+      displayName: 'Podman Machine',
+      status: 'stopped',
+      endpoint: { socketPath: '/run/podman/podman.sock' },
+      type: 'podman',
+    };
+    const provider: ProviderInfo = {
+      internalId: 'id',
+      id: 'podman',
+      extensionId: 'podman',
+      name: 'Podman',
+      containerConnections: [connection],
+      kubernetesConnections: [],
+      vmConnections: [],
+      status: 'error',
+    } as unknown as ProviderInfo;
+    getProviderInfosMock.mockReturnValue([provider]);
+
+    const providerListener = vi.mocked(providerRegistryMock.addProviderListener).mock.calls[0]?.[0];
+    providerListener?.('provider:update-status', provider);
+
+    expect(apiSenderMock.send).toHaveBeenCalledWith('dashboard:system-overview-status', {
+      status: 'critical',
+      text: 'Error detected',
+    });
+  });
+
+  test('should send critical with multiple errors text when multiple providers have error status', () => {
+    const provider1: ProviderInfo = {
+      internalId: 'id1',
+      id: 'podman',
+      extensionId: 'podman',
+      name: 'Podman',
+      containerConnections: [
+        {
+          connectionType: 'container',
+          name: 'machine1',
+          displayName: 'Machine 1',
+          status: 'stopped',
+          endpoint: { socketPath: '/run/podman/podman.sock' },
+          type: 'podman',
+        } as ProviderContainerConnectionInfo,
+      ],
+      kubernetesConnections: [],
+      vmConnections: [],
+      status: 'error',
+    } as unknown as ProviderInfo;
+    const provider2: ProviderInfo = {
+      internalId: 'id2',
+      id: 'docker',
+      extensionId: 'docker',
+      name: 'Docker',
+      containerConnections: [
+        {
+          connectionType: 'container',
+          name: 'docker',
+          displayName: 'Docker',
+          status: 'stopped',
+          endpoint: { socketPath: '/var/run/docker.sock' },
+          type: 'docker',
+        } as ProviderContainerConnectionInfo,
+      ],
+      kubernetesConnections: [],
+      vmConnections: [],
+      status: 'error',
+    } as unknown as ProviderInfo;
+    getProviderInfosMock.mockReturnValue([provider1, provider2]);
+
+    const providerListener = vi.mocked(providerRegistryMock.addProviderListener).mock.calls[0]?.[0];
+    providerListener?.('provider:update-status', provider1);
+
+    expect(apiSenderMock.send).toHaveBeenCalledWith('dashboard:system-overview-status', {
+      status: 'critical',
+      text: 'Multiple errors detected',
+    });
+  });
 });

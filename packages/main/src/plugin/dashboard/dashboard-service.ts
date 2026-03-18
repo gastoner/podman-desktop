@@ -114,8 +114,10 @@ export class DashboardService {
       };
     }
 
-    const hasCritical = allConnections.some(c => c.status === 'unknown');
-    const hasProgressing = allConnections.some(c => c.status === 'starting' || c.status === 'stopping');
+    const hasCritical = providers.some(p => p.status === 'error');
+    const hasProgressing = allConnections.some(
+      c => c.status === 'starting' || c.status === 'stopping' || c.status === 'unknown',
+    );
     const hasContainerStarted = providers.some(p => p.containerConnections.some(c => c.status === 'started'));
 
     let worstStatus: SystemOverviewStatus;
@@ -140,7 +142,6 @@ export class DashboardService {
     allConnections: ProviderConnectionInfo[],
     providers: ProviderInfo[],
   ): string {
-    const errorConnections = allConnections.filter(connection => connection.status === 'unknown').length;
     const errorProviders = providers.filter(provider => provider.status === 'error').length;
 
     switch (status) {
@@ -149,18 +150,15 @@ export class DashboardService {
       case HEALTH_MONITOR_STATUS.STABLE:
         return 'Some systems are stopped';
       case HEALTH_MONITOR_STATUS.PROGRESSING:
-        // Check if starting or stopping
-        if (allConnections.filter(connection => connection.status === 'starting').length) {
-          return 'Starting up...';
-        } else {
+        if (allConnections.some(connection => connection.status === 'stopping')) {
           return 'Stopping...';
         }
+        return 'Starting up...';
       case HEALTH_MONITOR_STATUS.CRITICAL:
-        if (errorConnections > 1 || errorProviders > 1 || (errorConnections === 1 && errorProviders === 1)) {
+        if (errorProviders > 1) {
           return 'Multiple errors detected';
-        } else {
-          return 'Error detected';
         }
+        return 'Error detected';
       default:
         return 'Unknown';
     }
