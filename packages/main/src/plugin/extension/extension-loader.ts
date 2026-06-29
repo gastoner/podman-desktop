@@ -66,6 +66,7 @@ import { KubernetesClient } from '/@/plugin/kubernetes/kubernetes-client.js';
 import { MenuRegistry } from '/@/plugin/menu-registry.js';
 import { MessageBox } from '/@/plugin/message-box.js';
 import { ModuleLoader } from '/@/plugin/module-loader.js';
+import { NavigationHistoryRegistry } from '/@/plugin/navigation/navigation-history-registry.js';
 import { NavigationManager } from '/@/plugin/navigation/navigation-manager.js';
 import { OnboardingRegistry } from '/@/plugin/onboarding-registry.js';
 import { ProviderRegistry } from '/@/plugin/provider-registry.js';
@@ -225,6 +226,8 @@ export class ExtensionLoader implements IAsyncDisposable {
     private extensionApiVersion: ExtensionApiVersion,
     @inject(FeatureRegistry)
     private featureRegistry: FeatureRegistry,
+    @inject(NavigationHistoryRegistry)
+    private navigationHistoryRegistry: NavigationHistoryRegistry,
   ) {
     this.pluginsDirectory = directories.getPluginsDirectory();
     this.pluginsScanDirectory = directories.getPluginsScanDirectory();
@@ -1657,6 +1660,11 @@ export class ExtensionLoader implements IAsyncDisposable {
         disposables.push(disposable);
 
         return disposable;
+      },
+      registerNavigationHistoryProvider: (): containerDesktopAPI.NavigationHistoryProvider => {
+        const provider = this.navigationHistoryRegistry.registerProvider(extensionInfo.id);
+        disposables.push(provider);
+        return provider;
       },
     };
 

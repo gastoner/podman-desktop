@@ -5046,6 +5046,96 @@ declare module '@podman-desktop/api' {
     readonly searchTerm?: string;
   }
 
+  /**
+   * An entry in the unified navigation history.
+   *
+   * Extensions push these entries to report internal navigation changes
+   * (e.g. navigating between pages inside a webview SPA).
+   */
+  export interface NavigationHistoryEntry {
+    /**
+     * Display name shown in the history dropdown (e.g. "Model Detail").
+     */
+    name: string;
+
+    /**
+     * Opaque route string identifying the internal navigation state.
+     * Podman Desktop stores this and passes it back verbatim via
+     * {@link NavigationHistoryProvider.onDidRequestNavigation} when
+     * back/forward navigation targets this entry.
+     */
+    route: string;
+
+    /**
+     * Optional icon for the history entry. Falls back to the extension icon
+     * if not provided.
+     *
+     * Can be a single URI string or a theme-aware pair of URIs.
+     */
+    icon?: string | { readonly light: string; readonly dark: string };
+  }
+
+  /**
+   * Describes the extension's current position within the unified navigation history.
+   *
+   * Scoped to this extension's own entries. The extension tracks how many
+   * entries it has pushed and can derive back/forward capability from the index.
+   */
+  export interface NavigationHistoryPosition {
+    /**
+     * Zero-based index of the currently active entry among this extension's
+     * entries. `-1` when the user is not on any of this extension's pages.
+     */
+    readonly currentIndex: number;
+  }
+
+  /**
+   * A provider that integrates an extension's internal navigation
+   * into Podman Desktop's unified back/forward history.
+   *
+   * @example
+   * ```typescript
+   * import { navigation } from '@podman-desktop/api';
+   *
+   * const historyProvider = navigation.registerNavigationHistoryProvider();
+   *
+   * // Push an entry when the user navigates inside the webview
+   * historyProvider.pushEntry({ name: 'Model Detail', route: '/models/llama3' });
+   *
+   * // Handle back/forward navigation from Podman Desktop
+   * historyProvider.onDidRequestNavigation(entry => {
+   *   webview.postMessage({ type: 'navigate', route: entry.route });
+   * });
+   *
+   * // React to position changes
+   * historyProvider.onDidChangePosition(pos => {
+   *   console.log(`Entry ${pos.currentIndex + 1} of ${pos.entryCount}`);
+   * });
+   * ```
+   */
+  export interface NavigationHistoryProvider extends Disposable {
+    /**
+     * Push a new entry onto Podman Desktop's unified navigation history.
+     * This should be called whenever the user navigates to a new page
+     * within the extension's webview.
+     */
+    pushEntry(entry: NavigationHistoryEntry): void;
+
+    /**
+     * Fired when Podman Desktop's back/forward navigation targets an entry
+     * previously pushed by this provider. The extension should navigate
+     * its webview to the route specified in the entry.
+     */
+    onDidRequestNavigation: Event<NavigationHistoryEntry>;
+
+    /**
+     * Fired when this extension's position in the history stack changes.
+     * This happens when entries are pushed, removed, or the user navigates
+     * back/forward through the global history.
+     */
+    onDidChangePosition: Event<NavigationHistoryPosition>;
+  }
+
   export namespace navigation {
     // Navigate to the Dashboard page
     export function navigateToDashboard(): Promise<void>;
@@ -5153,6 +5243,15 @@ declare module '@podman-desktop/api' {
      * @param args the arguments to provide to the command linked to the routeId
      */
     export function navigate(routeId: string, ...args: unknown[]): Promise<void>;
+
+    /**
+     * Register a navigation history provider that integrates the extension's
+     * internal navigation into Podman Desktop's unified back/forward history.
+     *
+     * @returns A {@link NavigationHistoryProvider} that the extension uses to
+     * push entries and receive navigation callbacks. Dispose it to unregister.
+     */
+    export function registerNavigationHistoryProvider(): NavigationHistoryProvider;
   }
 
   /**

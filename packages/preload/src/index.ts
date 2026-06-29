@@ -281,6 +281,20 @@ export function initExposure(): void {
     return ipcRenderer.invoke('navigation:navigateToRoute', routeId, ...args);
   });
 
+  contextBridge.exposeInMainWorld(
+    'navigateToExtensionHistoryEntry',
+    async (extensionId: string, route: string): Promise<void> => {
+      return ipcRenderer.invoke('navigation-history:navigateToEntry', extensionId, route);
+    },
+  );
+
+  contextBridge.exposeInMainWorld(
+    'updateNavigationHistoryPosition',
+    async (positionInfo: { extensionId: string; currentIndex: number }): Promise<void> => {
+      return ipcRenderer.invoke('navigation-history:updatePosition', positionInfo);
+    },
+  );
+
   contextBridge.exposeInMainWorld('listContainers', async (): Promise<ContainerInfo[]> => {
     return ipcInvoke('container-provider-registry:listContainers');
   });

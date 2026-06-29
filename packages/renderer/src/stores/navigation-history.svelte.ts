@@ -16,12 +16,14 @@
  * SPDX-License-Identifier: Apache-2.0
  ***********************************************************************/
 
+import type { NavigationHistoryPushInfo } from '@podman-desktop/core-api';
 import { get } from 'svelte/store';
 import { router } from 'tinro';
 
 import DashboardIcon from '/@/lib/images/DashboardIcon.svelte';
 import SettingsIcon from '/@/lib/images/SettingsIcon.svelte';
 import { settingsNavigationEntries } from '/@/PreferencesNavigation';
+import { extensionInfos } from '/@/stores/extensions';
 import { kubernetesNoCurrentContext } from '/@/stores/kubernetes-no-current-context';
 import { navigationRegistry, type NavigationRegistryEntry } from '/@/stores/navigation/navigation-registry';
 
@@ -38,14 +40,19 @@ export interface HistoryEntry {
   icon?: HistoryEntryIcon;
 }
 
+export interface HistoryStackEntry {
+  url: string;
+  extensionEntry?: NavigationHistoryPushInfo;
+}
+
 /**
  * Navigation history store
  *
- * @property stack - An array of URLs
+ * @property stack - An array of history entries (URL-based or extension-pushed)
  * @property index - The current index in the stack
  */
 export const navigationHistory = $state<{
-  stack: string[];
+  stack: HistoryStackEntry[];
   index: number;
 }>({
   stack: [],
@@ -53,6 +60,10 @@ export const navigationHistory = $state<{
 });
 
 let isNavigatingHistory = false;
+
+// Extensions being navigated to via back/forward — ignore their pushes
+// until the navigation settles (webview re-mounts and replays initial route)
+const extensionsNavigatingHistory = new Set<string>();
 
 interface ParsedUrl {
   path: string;
@@ -297,7 +308,11 @@ function getEntryInfo(url: string): { name: string; icon?: HistoryEntryIcon } {
   const registry = get(navigationRegistry);
   const result = findNavigationEntry(url, registry);
   if (result) {
-    // Always use urlToDisplayName, passing registry breadcrumb for base routes
+    // Webview and contribution pages are leaf entries — use the entry name directly
+    // instead of building a breadcrumb like "Extensions > Name > id"
+    if (path.startsWith('/webviews/') || path.startsWith('/contribs/')) {
+      return { name: result.entry.name, icon: result.entry.icon };
+    }
     return { name: urlToDisplayName(url, result.breadcrumb), icon: result.entry.icon };
   }
 
@@ -314,6 +329,20 @@ function getEntryInfo(url: string): { name: string; icon?: HistoryEntryIcon } {
 
   // Fallback to URL-based name
   return { name: urlToDisplayName(url), icon: undefined };
+}
+
+export function getStackEntryInfo(stackEntry: HistoryStackEntry): { name: string; icon?: HistoryEntryIcon } {
+  if (stackEntry.extensionEntry) {
+    const ext = stackEntry.extensionEntry;
+    const extInfo = get(extensionInfos).find(e => e.id === ext.extensionId);
+    const icon = ext.icon ?? extInfo?.icon;
+    const displayName = extInfo?.displayName ?? ext.extensionId;
+    return {
+      name: `${displayName} > ${ext.name}`,
+      icon: icon ? { iconImage: icon } : undefined,
+    };
+  }
+  return getEntryInfo(stackEntry.url);
 }
 
 /**
@@ -333,10 +362,18 @@ function navigateToIndex(index: number): boolean {
 
   isNavigatingHistory = true;
   navigationHistory.index = index;
-  const url = navigationHistory.stack[index];
-  if (url) {
-    router.goto(url);
+  const entry = navigationHistory.stack[index];
+  if (entry) {
+    if (entry.extensionEntry) {
+      extensionsNavigatingHistory.add(entry.extensionEntry.extensionId);
+      window
+        .navigateToExtensionHistoryEntry(entry.extensionEntry.extensionId, entry.extensionEntry.route)
+        .catch(console.error);
+    } else {
+      router.goto(entry.url);
+    }
   }
+  notifyExtensionPositions();
   return true;
 }
 
@@ -414,7 +451,7 @@ function getEntries(direction: Direction): HistoryEntry[] {
   for (let i = start; condition(i); i += step) {
     const url = navigationHistory.stack[i];
     if (url) {
-      const info = getEntryInfo(url);
+      const info = getStackEntryInfo(url);
       entries.push({
         index: i,
         name: info.name,
@@ -456,6 +493,23 @@ export function getForwardEntries(): HistoryEntry[] {
 }
 
 /**
+ * Get all history entries in the stack with resolved names and icons.
+ * Each entry includes its index, name, icon, and whether it is the current entry.
+ */
+export function getAllEntries(): (HistoryEntry & { current: boolean; isExtension: boolean })[] {
+  return navigationHistory.stack.map((stackEntry, i) => {
+    const info = getStackEntryInfo(stackEntry);
+    return {
+      index: i,
+      name: info.name,
+      icon: info.icon,
+      current: i === navigationHistory.index,
+      isExtension: !!stackEntry.extensionEntry,
+    };
+  });
+}
+
+/**
  * Check if a URL is a submenu base route that immediately redirects.
  * Submenu routes (like /kubernetes) redirect to their first item (like /kubernetes/dashboard)
  * and should not be added to history to prevent navigation issues when going back.
@@ -463,6 +517,30 @@ export function getForwardEntries(): HistoryEntry[] {
 function isSubmenuBaseRoute(url: string): boolean {
   const registry = get(navigationRegistry);
   return registry.some(entry => entry.type === 'submenu' && entry.link === url);
+}
+
+function notifyExtensionPositions(): void {
+  const extensionIds = new Set<string>();
+  for (const entry of navigationHistory.stack) {
+    if (entry.extensionEntry) {
+      extensionIds.add(entry.extensionEntry.extensionId);
+    }
+  }
+
+  for (const extensionId of extensionIds) {
+    const extEntries = navigationHistory.stack
+      .map((entry, globalIndex) => ({ entry, globalIndex }))
+      .filter(({ entry }) => entry.extensionEntry?.extensionId === extensionId);
+
+    const currentExtIndex = extEntries.findIndex(({ globalIndex }) => globalIndex === navigationHistory.index);
+
+    window
+      .updateNavigationHistoryPosition({
+        extensionId,
+        currentIndex: currentExtIndex,
+      })
+      .catch(console.error);
+  }
 }
 
 // Initialize router subscription
@@ -499,10 +577,17 @@ router.subscribe(navigation => {
 
     const currentUrl = navigationHistory.stack[navigationHistory.index];
 
+    // Skip webview/contribs URLs — extensions with history providers push their own entries
+    const urlPath = navigation.url.split('?')[0];
+    if (urlPath.startsWith('/webviews/') || urlPath.startsWith('/contribs/')) {
+      return;
+    }
+
     // Add every URL change to history (including tab changes)
-    if (currentUrl !== navigation.url) {
-      navigationHistory.stack = [...navigationHistory.stack, navigation.url];
+    if (currentUrl?.url !== navigation.url) {
+      navigationHistory.stack = [...navigationHistory.stack, { url: navigation.url }];
       navigationHistory.index = navigationHistory.stack.length - 1;
+      notifyExtensionPositions();
     }
   }
 });
@@ -514,4 +599,50 @@ window.events?.receive('navigation-go-back', () => {
 
 window.events?.receive('navigation-go-forward', () => {
   goForward();
+});
+
+window.events?.receive('navigation-history-push', (entry: NavigationHistoryPushInfo) => {
+  // When navigating back/forward to an extension entry, the webview re-mounts
+  // and replays its initial route before the target route arrives. Suppress
+  // the first push from this extension (the stale initial-route replay).
+  if (extensionsNavigatingHistory.has(entry.extensionId)) {
+    extensionsNavigatingHistory.delete(entry.extensionId);
+    return;
+  }
+
+  // Skip if the current entry already matches (e.g. duplicate push)
+  const currentEntry = navigationHistory.stack[navigationHistory.index];
+  if (
+    currentEntry?.extensionEntry?.extensionId === entry.extensionId &&
+    currentEntry.extensionEntry.route === entry.route
+  ) {
+    return;
+  }
+
+  // Truncate forward history if we're not at the end
+  if (navigationHistory.index < navigationHistory.stack.length - 1) {
+    navigationHistory.stack = navigationHistory.stack.slice(0, navigationHistory.index + 1);
+  }
+
+  navigationHistory.stack = [
+    ...navigationHistory.stack,
+    { url: `/__extension__/${entry.extensionId}/${entry.route}`, extensionEntry: entry },
+  ];
+  navigationHistory.index = navigationHistory.stack.length - 1;
+  notifyExtensionPositions();
+});
+
+window.events?.receive('navigation-history-remove-extension', (extensionId: string) => {
+  const currentEntry = navigationHistory.stack[navigationHistory.index];
+
+  navigationHistory.stack = navigationHistory.stack.filter(entry => entry.extensionEntry?.extensionId !== extensionId);
+
+  // Recalculate index to point to the same entry if possible
+  if (currentEntry) {
+    const newIndex = navigationHistory.stack.indexOf(currentEntry);
+    navigationHistory.index = newIndex >= 0 ? newIndex : Math.max(0, navigationHistory.stack.length - 1);
+  } else {
+    navigationHistory.index = Math.max(0, navigationHistory.stack.length - 1);
+  }
+  notifyExtensionPositions();
 });

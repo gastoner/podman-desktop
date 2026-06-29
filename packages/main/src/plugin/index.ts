@@ -161,6 +161,7 @@ import { FeatureRegistry } from '/@/plugin/feature-registry.js';
 import { KubeGeneratorRegistry } from '/@/plugin/kubernetes/kube-generator-registry.js';
 import { LockedConfiguration } from '/@/plugin/locked-configuration.js';
 import { MenuRegistry } from '/@/plugin/menu-registry.js';
+import { NavigationHistoryRegistry } from '/@/plugin/navigation/navigation-history-registry.js';
 import { NavigationManager } from '/@/plugin/navigation/navigation-manager.js';
 import { TaskManager } from '/@/plugin/tasks/task-manager.js';
 import { Uri } from '/@/plugin/types/uri.js';
@@ -777,6 +778,7 @@ export class PluginSystem {
     dialogRegistry.init();
 
     container.bind<NavigationManager>(NavigationManager).toSelf().inSingletonScope();
+    container.bind<NavigationHistoryRegistry>(NavigationHistoryRegistry).toSelf().inSingletonScope();
     container.bind<CommandsInit>(CommandsInit).toSelf().inSingletonScope();
     const commandsInit = container.get<CommandsInit>(CommandsInit);
     commandsInit.init();

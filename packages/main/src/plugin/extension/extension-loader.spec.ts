@@ -59,6 +59,7 @@ import type { KubeGeneratorRegistry } from '/@/plugin/kubernetes/kube-generator-
 import type { KubernetesClient } from '/@/plugin/kubernetes/kubernetes-client.js';
 import type { MenuRegistry } from '/@/plugin/menu-registry.js';
 import type { MessageBox } from '/@/plugin/message-box.js';
+import type { NavigationHistoryRegistry } from '/@/plugin/navigation/navigation-history-registry.js';
 import { NavigationManager } from '/@/plugin/navigation/navigation-manager.js';
 import type { OnboardingRegistry } from '/@/plugin/onboarding-registry.js';
 import type { ProviderRegistry } from '/@/plugin/provider-registry.js';
@@ -168,6 +169,16 @@ const imageRegistry: ImageRegistry = {
 const featureRegistry: FeatureRegistry = {
   registerFeatures: vi.fn(),
 } as unknown as FeatureRegistry;
+
+const navigationHistoryRegistry: NavigationHistoryRegistry = {
+  registerProvider: vi.fn().mockReturnValue({
+    pushEntry: vi.fn(),
+    onDidRequestNavigation: vi.fn(),
+    dispose: vi.fn(),
+  }),
+  navigateToEntry: vi.fn(),
+  hasProvider: vi.fn(),
+} as unknown as NavigationHistoryRegistry;
 
 const apiSender: ApiSenderType = { send: vi.fn() } as unknown as ApiSenderType;
 
@@ -394,6 +405,7 @@ beforeEach(() => {
     extensionAnalyzer,
     extensionApiVersion,
     featureRegistry,
+    navigationHistoryRegistry,
   );
 });
 
