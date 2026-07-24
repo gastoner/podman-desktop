@@ -3,18 +3,32 @@ import { faRocket } from '@fortawesome/free-solid-svg-icons';
 import type { CheckStatus, ProviderInfo } from '@podman-desktop/core-api';
 import { Button } from '@podman-desktop/ui-svelte';
 
-export let provider: ProviderInfo;
+interface Props {
+  provider: ProviderInfo;
+  onPreflightChecks: (status: CheckStatus[]) => void;
+}
 
-export let onPreflightChecks: (status: CheckStatus[]) => void;
+let { provider, onPreflightChecks }: Props = $props();
 
-let installInProgress = false;
+let installInProgress = $state(false);
 
-let checksStatus: CheckStatus[] = [];
+let checksStatus = $state<CheckStatus[]>([]);
 
-let preflightChecksFailed = false;
+let preflightChecksFailed = $state(false);
 
-async function performInstallation(provider: ProviderInfo): Promise<void> {
+let hasWarnings = $state(false);
+
+async function performInstallation(): Promise<void> {
   installInProgress = true;
+
+  if (hasWarnings) {
+    await window.installProvider(provider.internalId);
+    onPreflightChecks([]);
+    hasWarnings = false;
+    installInProgress = false;
+    return;
+  }
+
   checksStatus = [];
   let checkSuccess = false;
   let currentCheck: CheckStatus;
@@ -38,9 +52,12 @@ async function performInstallation(provider: ProviderInfo): Promise<void> {
     console.error(err);
   }
   if (checkSuccess) {
-    await window.installProvider(provider.internalId);
-    // reset checks
-    onPreflightChecks([]);
+    if (checksStatus.some(c => c.successful === false && c.severity === 'warning')) {
+      hasWarnings = true;
+    } else {
+      await window.installProvider(provider.internalId);
+      onPreflightChecks([]);
+    }
   } else {
     preflightChecksFailed = true;
   }
@@ -54,7 +71,7 @@ async function performInstallation(provider: ProviderInfo): Promise<void> {
     inProgress={installInProgress}
     disabled={preflightChecksFailed}
     icon={faRocket}
-    on:click={(): Promise<void> => performInstallation(provider)}>
-    Install
+    onclick={performInstallation}>
+    {hasWarnings ? 'Proceed with installation' : 'Install'}
   </Button>
 {/if}
