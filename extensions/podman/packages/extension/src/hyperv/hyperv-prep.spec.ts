@@ -310,6 +310,42 @@ describe('HyperVPrep command handler', () => {
     );
   });
 
+  test('allows onboarding to show its own completion view instead of a duplicate information dialog', async () => {
+    vi.mocked(execPodman)
+      .mockResolvedValueOnce({ stdout: NEEDED_STATUS_OUTPUT, stderr: '', command: 'status' })
+      .mockResolvedValueOnce({ stdout: '', stderr: '', command: 'run' })
+      .mockResolvedValueOnce({ stdout: APPLIED_STATUS_OUTPUT, stderr: '', command: 'status' });
+    const hyperVPrep = new HyperVPrep(podmanBinaryMock, telemetryLoggerMock);
+
+    const status = await hyperVPrep.prepare('podman.onboarding.hypervPrep', { showCompletionMessage: false });
+
+    expect(status?.status).toBe('applied');
+    expect(extensionApi.window.showInformationMessage).toHaveBeenCalledOnce();
+    expect(extensionApi.window.showInformationMessage).toHaveBeenCalledWith(
+      'Prepare Hyper-V now? Administrator approval (UAC) is required.',
+      'Yes',
+      'No',
+    );
+  });
+
+  test('can suppress the completion dialog for onboarding', async () => {
+    vi.mocked(execPodman)
+      .mockResolvedValueOnce({ stdout: NEEDED_STATUS_OUTPUT, stderr: '', command: 'status' })
+      .mockResolvedValueOnce({ stdout: '', stderr: '', command: 'run' })
+      .mockResolvedValueOnce({ stdout: APPLIED_STATUS_OUTPUT, stderr: '', command: 'status' });
+    const hyperVPrep = new HyperVPrep(podmanBinaryMock, telemetryLoggerMock);
+
+    const status = await hyperVPrep.prepare('podman.onboarding.hypervPrep', { showCompletionMessage: false });
+
+    expect(status?.status).toBe('applied');
+    expect(extensionApi.window.showInformationMessage).toHaveBeenCalledOnce();
+    expect(extensionApi.window.showInformationMessage).toHaveBeenCalledWith(
+      'Prepare Hyper-V now? Administrator approval (UAC) is required.',
+      'Yes',
+      'No',
+    );
+  });
+
   test('skips prep when user declines confirmation', async () => {
     vi.mocked(extensionApi.window.showInformationMessage).mockResolvedValue('No');
     const callback = await setupHyperVPrepCommand();

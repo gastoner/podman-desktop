@@ -67,6 +67,7 @@ import { PodmanInfoHelper } from './helpers/podman-info-helper';
 import { QemuHelper } from './helpers/qemu-helper';
 import { WslHelper } from './helpers/wsl-helper';
 import { HyperVPrep } from './hyperv/hyperv-prep';
+import { HyperVPrepOnboarding } from './hyperv/hyperv-prep-onboarding';
 import { InversifyBinding } from './inject/inversify-binding';
 import { PodmanInstall } from './installer/podman-install';
 import { PodmanRemoteConnections } from './remote/podman-remote-connections';
@@ -1427,6 +1428,7 @@ export async function initInversify(
   rosettaProvisioner = inversifyContainer.get(RosettaProvisioner);
   const podmanProvider = await inversifyContainer.getAsync(PodmanProvider);
   await inversifyContainer.getAsync(HyperVPrep);
+  await inversifyContainer.getAsync(HyperVPrepOnboarding);
 
   return { podmanInstall, winPlatform, podmanProvider };
 }

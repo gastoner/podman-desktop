@@ -39,6 +39,10 @@ export interface HyperVPrepStatusResult {
   stdout?: string;
 }
 
+export interface HyperVPrepOptions {
+  showCompletionMessage?: boolean;
+}
+
 @injectable()
 export class HyperVPrep {
   private readonly podmanMinimumVersionForHyperVPrep = '6.0.0';
@@ -61,7 +65,7 @@ export class HyperVPrep {
     }
 
     await this.refreshContext();
-    this.#command = commands.registerCommand(HYPERV_PREP_COMMAND, this.prepare.bind(this));
+    this.#command = commands.registerCommand(HYPERV_PREP_COMMAND, () => this.prepare());
   }
 
   @preDestroy()
@@ -163,23 +167,28 @@ export class HyperVPrep {
       : 'You are not a member of the Hyper-V Administrators group.';
   }
 
-  private async prepare(): Promise<void> {
+  async prepare(
+    telemetryEvent = HYPERV_PREP_COMMAND,
+    options: HyperVPrepOptions = {},
+  ): Promise<HyperVPrepStatusResult | undefined> {
     if (!(await this.isSupported())) {
-      return;
+      return undefined;
     }
 
     try {
       const currentStatus = await this.getStatus();
       if (currentStatus.status === 'applied') {
-        await window.showInformationMessage('Hyper-V preparation is already applied.');
+        if (options.showCompletionMessage !== false) {
+          await window.showInformationMessage('Hyper-V preparation is already applied.');
+        }
         await this.refreshContext();
-        return;
+        return currentStatus;
       }
     } catch (error) {
       const message = this.getErrorMessage(error, 'Unknown error while checking Hyper-V preparation status.');
       this.telemetryLogger.logError('hypervPrepStatusCheckFailed', { error: message });
       await window.showErrorMessage(`Hyper-V preparation status check failed: ${message}`);
-      return;
+      return undefined;
     }
 
     const confirmation = await window.showInformationMessage(
@@ -188,7 +197,7 @@ export class HyperVPrep {
       'No',
     );
     if (confirmation !== 'Yes') {
-      return;
+      return undefined;
     }
 
     try {
@@ -203,18 +212,21 @@ export class HyperVPrep {
       const message = this.getErrorMessage(error, 'Unknown error while preparing Hyper-V.');
       this.telemetryLogger.logError('hypervPrepFailed', { error: message });
       await window.showErrorMessage(`Hyper-V preparation failed: ${message}`);
-      return;
+      return undefined;
     }
 
     const updatedStatus = await this.refreshContext();
-    this.telemetryLogger.logUsage('podman.hypervPrep', { status: updatedStatus?.status ?? 'unknown' });
-    if (updatedStatus?.status === 'applied') {
-      await window.showInformationMessage(`Hyper-V preparation applied.\n\n${HYPERV_PREP_RELOGIN_MESSAGE}`);
-    } else {
-      await window.showInformationMessage(
-        `Hyper-V preparation finished, but the status could not be confirmed.\n\n${HYPERV_PREP_RELOGIN_MESSAGE}`,
-      );
+    this.telemetryLogger.logUsage(telemetryEvent, { status: updatedStatus?.status ?? 'unknown' });
+    if (options.showCompletionMessage !== false) {
+      if (updatedStatus?.status === 'applied') {
+        await window.showInformationMessage(`Hyper-V preparation applied.\n\n${HYPERV_PREP_RELOGIN_MESSAGE}`);
+      } else {
+        await window.showInformationMessage(
+          `Hyper-V preparation finished, but the status could not be confirmed.\n\n${HYPERV_PREP_RELOGIN_MESSAGE}`,
+        );
+      }
     }
+    return updatedStatus;
   }
 
   private getErrorMessage(error: unknown, fallback: string): string {

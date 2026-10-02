@@ -36,6 +36,7 @@ import { WSL2Check } from '/@/checks/windows/wsl2-check';
 import { PodmanCleanupMacOS } from '/@/cleanup/podman-cleanup-macos';
 import { PodmanCleanupWindows } from '/@/cleanup/podman-cleanup-windows';
 import { HyperVPrep } from '/@/hyperv/hyperv-prep';
+import { HyperVPrepOnboarding } from '/@/hyperv/hyperv-prep-onboarding';
 import { Installer } from '/@/installer/installer';
 import { MacOSInstaller } from '/@/installer/mac-os-installer';
 import { PodmanInstall } from '/@/installer/podman-install';
@@ -85,6 +86,7 @@ export class InversifyBinding {
     this.#inversifyContainer.bind(PodmanProvider).toSelf().inSingletonScope();
     this.#inversifyContainer.bind(RosettaProvisioner).toSelf().inSingletonScope();
     this.#inversifyContainer.bind(HyperVPrep).toSelf().inSingletonScope();
+    this.#inversifyContainer.bind(HyperVPrepOnboarding).toSelf().inSingletonScope();
 
     if (envAPI.isWindows) {
       this.#inversifyContainer.bind(Installer).to(WinInstaller).inSingletonScope();

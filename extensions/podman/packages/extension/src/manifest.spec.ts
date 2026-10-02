@@ -29,3 +29,45 @@ test('binary path has an explicit label without changing its configuration contr
     description: 'Custom path to Podman binary (Default is blank)',
   });
 });
+
+test('Hyper-V preparation onboarding is offered before machine creation and can be skipped', () => {
+  const steps = manifest.contributes.onboarding.steps;
+  const checkIndex = steps.findIndex(step => step.id === 'checkHyperVPrepCommand');
+  const prepIndex = steps.findIndex(step => step.id === 'hypervPrepView');
+  const createMachineIndex = steps.findIndex(step => step.id === 'createPodmanMachineCommand');
+
+  expect(checkIndex).toBeGreaterThan(-1);
+  expect(prepIndex).toBeGreaterThan(checkIndex);
+  expect(createMachineIndex).toBeGreaterThan(prepIndex);
+  expect(steps[checkIndex]).toMatchObject({
+    command: 'podman.onboarding.checkHyperVPrep',
+    completionEvents: ['onCommand:podman.onboarding.checkHyperVPrep'],
+  });
+  expect(steps[prepIndex]).toMatchObject({
+    when: expect.stringContaining('onboardingContext:hypervPrepAvailable'),
+  });
+  expect(steps[prepIndex]?.completionEvents).toBeUndefined();
+  const prepContent = steps[prepIndex]?.content?.flatMap(row => row);
+  const pendingContent = prepContent?.find(item => item.when === 'onboardingContext:hypervPrepOutcome == pending');
+  expect(pendingContent?.value).toContain('${onboardingContext:hypervPrepSummary}');
+  expect(pendingContent?.value).toContain('command=podman.onboarding.hypervPrep');
+  expect(pendingContent?.value).toContain('command=podman.onboarding.skipHyperVPrep');
+  expect(pendingContent?.value?.indexOf('${onboardingContext:hypervPrepSummary}')).toBeLessThan(
+    pendingContent?.value?.indexOf('command=podman.onboarding.hypervPrep') ?? -1,
+  );
+  expect(prepContent).toHaveLength(3);
+  expect(prepContent).toHaveLength(3);
+  expect(pendingContent?.value?.indexOf('${onboardingContext:hypervPrepSummary}')).toBeLessThan(
+    pendingContent?.value?.indexOf('command=podman.onboarding.hypervPrep') ?? -1,
+  );
+  expect(prepContent).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ value: expect.stringContaining('command=podman.onboarding.hypervPrep') }),
+      expect.objectContaining({ value: expect.stringContaining('command=podman.onboarding.skipHyperVPrep') }),
+      expect.objectContaining({
+        value: expect.stringContaining('Sign out of Windows'),
+        when: 'onboardingContext:hypervPrepOutcome == prepared',
+      }),
+    ]),
+  );
+});

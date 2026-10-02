@@ -188,14 +188,16 @@ Check that your environment meets the following requirements:
 
 ### Optional: prepare Hyper-V (Podman 6+)
 
-With Podman 6 or later, you can optionally prepare the host for Hyper-V machines. This is not required if you continue running Podman Desktop as administrator.
+With Podman 6 or later, you can optionally prepare the host for Hyper-V machines. During Podman onboarding, Podman Desktop offers preparation when Hyper-V is installed and running and the preparation is needed. You can skip this step if you plan to use WSL or continue running Podman Desktop as administrator.
 
-Go to **Settings > Resources**. In the Podman provider section, click the **Prepare Hyper-V** button.
+You can also prepare Hyper-V later from **Settings > Resources**. In the Podman provider section, click the **Prepare Hyper-V** button.
 
 This executes the `podman system hyperv-prep` command with administrator privileges (UAC), which:
 
 - Adds the current user to the **Hyper-V Administrators** group, allowing you to manage Hyper-V virtual machines without running Podman Desktop as administrator.
 - Configures the required Hyper-V socket (vsock) registry entries for communication between the host and the virtual machine.
+
+The one-time preparation does not install or enable the Windows Hyper-V feature. Enabling Hyper-V still requires administrator privileges.
 
 :::note
 
