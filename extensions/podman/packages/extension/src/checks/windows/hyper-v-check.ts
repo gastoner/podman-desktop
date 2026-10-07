@@ -19,6 +19,7 @@ import type { CheckResult } from '@podman-desktop/api';
 import { inject, injectable } from 'inversify';
 
 import { BaseCheck } from '/@/checks/base-check';
+import { HyperVPrep } from '/@/hyperv/hyperv-prep';
 
 import { HyperVInstalledCheck } from './hyper-v-installed-check';
 import { HyperVRunningCheck } from './hyper-v-running-check';
@@ -34,6 +35,7 @@ export class HyperVCheck extends BaseCheck {
     @inject(HyperVInstalledCheck) private isHyperVInstalledCheck: HyperVInstalledCheck,
     @inject(PodmanDesktopElevatedCheck) private isPodmanDesktopElevatedCheck: PodmanDesktopElevatedCheck,
     @inject(UserAdminCheck) private userAdminCheck: UserAdminCheck,
+    @inject(HyperVPrep) private hyperVPrep: HyperVPrep,
   ) {
     super();
   }
@@ -41,14 +43,20 @@ export class HyperVCheck extends BaseCheck {
   async execute(): Promise<CheckResult> {
     const userAdminResult = await this.userAdminCheck.execute();
     if (!userAdminResult.successful) {
-      return userAdminResult;
+      if (!(await this.hyperVPrep.isCurrentUserHyperVAdminGroupMember())) {
+        return userAdminResult;
+      }
+    } else {
+      const podmanDesktopElevatedResult = await this.isPodmanDesktopElevatedCheck.execute();
+      if (!podmanDesktopElevatedResult.successful && !(await this.hyperVPrep.isCurrentUserHyperVAdminGroupMember())) {
+        return podmanDesktopElevatedResult;
+      }
     }
 
-    const podmanDesktopElevatedResult = await this.isPodmanDesktopElevatedCheck.execute();
-    if (!podmanDesktopElevatedResult.successful) {
-      return podmanDesktopElevatedResult;
-    }
+    return this.executeHyperVAvailabilityChecks();
+  }
 
+  private async executeHyperVAvailabilityChecks(): Promise<CheckResult> {
     const hyperVInstalledResult = await this.isHyperVInstalledCheck.execute();
     if (!hyperVInstalledResult.successful) {
       return hyperVInstalledResult;

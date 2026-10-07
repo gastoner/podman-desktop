@@ -164,6 +164,61 @@ describe('HyperVPrep.getStatus', () => {
   );
 });
 
+describe('HyperVPrep.isCurrentUserHyperVAdminGroupMember', () => {
+  test('returns true when the supported user is a group member', async () => {
+    vi.mocked(execPodman).mockResolvedValue({
+      stdout: APPLIED_STATUS_OUTPUT,
+      stderr: '',
+      command: 'podman system hyperv-prep --status',
+    });
+
+    const hyperVPrep = createHyperVPrep();
+
+    await expect(hyperVPrep.isCurrentUserHyperVAdminGroupMember()).resolves.toBe(true);
+    expect(execPodman).toHaveBeenCalledWith(['system', 'hyperv-prep', '--status']);
+  });
+
+  test('returns false when the supported user is not a group member', async () => {
+    vi.mocked(execPodman).mockResolvedValue({
+      stdout: NEEDED_STATUS_OUTPUT,
+      stderr: '',
+      command: 'podman system hyperv-prep --status',
+    });
+
+    const hyperVPrep = createHyperVPrep();
+
+    await expect(hyperVPrep.isCurrentUserHyperVAdminGroupMember()).resolves.toBe(false);
+  });
+
+  test('returns false without reading status when Podman is unsupported', async () => {
+    vi.mocked(PodmanBinary.prototype.getBinaryInfo).mockResolvedValue({ version: '5.9.9' });
+
+    const hyperVPrep = createHyperVPrep();
+
+    await expect(hyperVPrep.isCurrentUserHyperVAdminGroupMember()).resolves.toBe(false);
+    expect(execPodman).not.toHaveBeenCalled();
+  });
+
+  test('returns false without reading status on non-Windows', async () => {
+    vi.mocked(extensionApi.env).isWindows = false;
+
+    const hyperVPrep = createHyperVPrep();
+
+    await expect(hyperVPrep.isCurrentUserHyperVAdminGroupMember()).resolves.toBe(false);
+    expect(execPodman).not.toHaveBeenCalled();
+  });
+
+  test('returns false and logs when membership status cannot be read', async () => {
+    const error = new Error('status unavailable');
+    vi.mocked(execPodman).mockRejectedValue(error);
+
+    const hyperVPrep = createHyperVPrep();
+
+    await expect(hyperVPrep.isCurrentUserHyperVAdminGroupMember()).resolves.toBe(false);
+    expect(telemetryLoggerMock.logError).toHaveBeenCalledWith('hypervPrepStatusCheckFailed', { error });
+  });
+});
+
 describe('HyperVPrep.refreshContext', () => {
   test('hides buttons when Podman is older than version 6', async () => {
     vi.mocked(PodmanBinary.prototype.getBinaryInfo).mockResolvedValue({ version: '5.4.0' });

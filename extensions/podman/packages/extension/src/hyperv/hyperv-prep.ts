@@ -85,6 +85,25 @@ export class HyperVPrep {
     return this.parseStatus(result.stdout);
   }
 
+  async isCurrentUserHyperVAdminGroupMember(): Promise<boolean> {
+    if (!env.isWindows) {
+      return false;
+    }
+
+    try {
+      if (!(await this.isSupported())) {
+        return false;
+      }
+
+      const status = await this.getStatus();
+      return status.status === 'applied';
+    } catch (error: unknown) {
+      this.telemetryLogger.logError('hypervPrepStatusCheckFailed', { error });
+      console.warn('Unable to check Hyper-V group membership', error);
+      return false;
+    }
+  }
+
   /**
    * Parses output from `podman system hyperv-prep --status`, for example:
    * ```text

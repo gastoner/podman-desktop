@@ -19,6 +19,7 @@ import type { CheckResult } from '@podman-desktop/api';
 import { beforeEach, expect, test, vi } from 'vitest';
 
 import type { PodmanDesktopElevatedCheck } from '/@/checks/windows/podman-desktop-elevated-check';
+import type { HyperVPrep } from '/@/hyperv/hyperv-prep';
 import type { PowerShellClient } from '/@/utils/powershell';
 import { getPowerShellClient } from '/@/utils/powershell';
 
@@ -36,6 +37,7 @@ const isHyperVRunningCheck = { execute: vi.fn() } as unknown as HyperVRunningChe
 const isHyperVInstalledCheck = { execute: vi.fn() } as unknown as HyperVInstalledCheck;
 const isPodmanDesktopElevatedCheck = { execute: vi.fn() } as unknown as PodmanDesktopElevatedCheck;
 const userAdminCheck = { execute: vi.fn() } as unknown as UserAdminCheck;
+const hyperVPrep = { isCurrentUserHyperVAdminGroupMember: vi.fn() } as unknown as HyperVPrep;
 
 const SUCCESSFUL_CHECK_RESULT: CheckResult = { successful: true };
 const FAILED_CHECK_RESULT: CheckResult = { successful: false };
@@ -54,12 +56,14 @@ const POWERSHELL_CLIENT: PowerShellClient = {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.mocked(hyperVPrep.isCurrentUserHyperVAdminGroupMember).mockResolvedValue(false);
   vi.mocked(getPowerShellClient).mockResolvedValue(POWERSHELL_CLIENT);
   hyperVCheck = new HyperVCheck(
     isHyperVRunningCheck,
     isHyperVInstalledCheck,
     isPodmanDesktopElevatedCheck,
     userAdminCheck,
+    hyperVPrep,
   );
 });
 
@@ -125,4 +129,86 @@ test('expect HyperV preflight check return OK', async () => {
   expect(result.description).toBeUndefined();
   expect(result.docLinks?.[0].url).toBeUndefined();
   expect(result.docLinks?.[0].title).toBeUndefined();
+});
+
+test('uses supported group membership when the user is not in Windows Administrators', async () => {
+  vi.mocked(userAdminCheck.execute).mockResolvedValue({
+    ...FAILED_CHECK_RESULT,
+    description: 'userAdminCheck',
+  });
+  vi.mocked(hyperVPrep.isCurrentUserHyperVAdminGroupMember).mockResolvedValue(true);
+  vi.mocked(isHyperVInstalledCheck.execute).mockResolvedValue(SUCCESSFUL_CHECK_RESULT);
+  vi.mocked(isHyperVRunningCheck.execute).mockResolvedValue(SUCCESSFUL_CHECK_RESULT);
+
+  const result = await hyperVCheck.execute();
+
+  expect(result.successful).toBe(true);
+  expect(hyperVPrep.isCurrentUserHyperVAdminGroupMember).toHaveBeenCalledOnce();
+  expect(isPodmanDesktopElevatedCheck.execute).not.toHaveBeenCalled();
+  expect(isHyperVInstalledCheck.execute).toHaveBeenCalledOnce();
+  expect(isHyperVRunningCheck.execute).toHaveBeenCalledOnce();
+});
+
+test('uses supported group membership when Podman Desktop is not elevated', async () => {
+  vi.mocked(userAdminCheck.execute).mockResolvedValue(SUCCESSFUL_CHECK_RESULT);
+  vi.mocked(isPodmanDesktopElevatedCheck.execute).mockResolvedValue({
+    ...FAILED_CHECK_RESULT,
+    description: 'isPodmanDesktopElevatedCheck',
+  });
+  vi.mocked(hyperVPrep.isCurrentUserHyperVAdminGroupMember).mockResolvedValue(true);
+  vi.mocked(isHyperVInstalledCheck.execute).mockResolvedValue(SUCCESSFUL_CHECK_RESULT);
+  vi.mocked(isHyperVRunningCheck.execute).mockResolvedValue(SUCCESSFUL_CHECK_RESULT);
+
+  const result = await hyperVCheck.execute();
+
+  expect(result.successful).toBe(true);
+  expect(hyperVPrep.isCurrentUserHyperVAdminGroupMember).toHaveBeenCalledOnce();
+  expect(isHyperVInstalledCheck.execute).toHaveBeenCalledOnce();
+  expect(isHyperVRunningCheck.execute).toHaveBeenCalledOnce();
+});
+
+test('returns the original permission failure when group membership is false', async () => {
+  vi.mocked(userAdminCheck.execute).mockResolvedValue({
+    ...FAILED_CHECK_RESULT,
+    description: 'userAdminCheck',
+  });
+  vi.mocked(hyperVPrep.isCurrentUserHyperVAdminGroupMember).mockResolvedValue(false);
+
+  const result = await hyperVCheck.execute();
+
+  expect(result.successful).toBe(false);
+  expect(result.description).toBe('userAdminCheck');
+  expect(hyperVPrep.isCurrentUserHyperVAdminGroupMember).toHaveBeenCalledOnce();
+  expect(isHyperVInstalledCheck.execute).not.toHaveBeenCalled();
+  expect(isHyperVRunningCheck.execute).not.toHaveBeenCalled();
+});
+
+test('still fails when Hyper-V is unavailable after group membership succeeds', async () => {
+  vi.mocked(userAdminCheck.execute).mockResolvedValue({
+    ...FAILED_CHECK_RESULT,
+    description: 'userAdminCheck',
+  });
+  vi.mocked(hyperVPrep.isCurrentUserHyperVAdminGroupMember).mockResolvedValue(true);
+  vi.mocked(isHyperVInstalledCheck.execute).mockResolvedValue({
+    ...FAILED_CHECK_RESULT,
+    description: 'isHyperVInstalledCheck',
+  });
+
+  const result = await hyperVCheck.execute();
+
+  expect(result.successful).toBe(false);
+  expect(result.description).toBe('isHyperVInstalledCheck');
+  expect(isHyperVRunningCheck.execute).not.toHaveBeenCalled();
+});
+
+test('does not check group membership when existing permissions succeed', async () => {
+  vi.mocked(userAdminCheck.execute).mockResolvedValue(SUCCESSFUL_CHECK_RESULT);
+  vi.mocked(isPodmanDesktopElevatedCheck.execute).mockResolvedValue(SUCCESSFUL_CHECK_RESULT);
+  vi.mocked(isHyperVInstalledCheck.execute).mockResolvedValue(SUCCESSFUL_CHECK_RESULT);
+  vi.mocked(isHyperVRunningCheck.execute).mockResolvedValue(SUCCESSFUL_CHECK_RESULT);
+
+  const result = await hyperVCheck.execute();
+
+  expect(result.successful).toBe(true);
+  expect(hyperVPrep.isCurrentUserHyperVAdminGroupMember).not.toHaveBeenCalled();
 });
