@@ -78,6 +78,7 @@ beforeEach(async () => {
       expect.arrayContaining([
         expect.objectContaining({ name: 'Containers', visible: true, index: 0 }),
         expect.objectContaining({ name: 'Tools > Nodes', visible: false, index: undefined }),
+        expect.objectContaining({ name: 'Settings > Resources', visible: false, index: undefined }),
       ]),
     ),
   );
@@ -95,6 +96,7 @@ test('check navigation registry items', async () => {
   // expect 8 items in the registry
   expect(registries.length).equal(8);
   expect(getNavigationEntry('/tools/nodes')).toMatchObject({ parentName: 'Tools', index: undefined });
+  expect(getNavigationEntry('/preferences/resources')).toMatchObject({ parentName: 'Settings', index: undefined });
   expect(new NavigationUtils().getVisibleOrderedEntries(get(navigationRegistry)).map(item => item.name)).toEqual([
     'Containers',
     'Pods',
@@ -150,6 +152,22 @@ test('applies saved qualified-name order for a submenu child', async () => {
   expect(window.updateConfigurationValue).not.toHaveBeenCalledWith('navbar.itemOrder', expect.anything());
 });
 
+test('applies saved qualified-name order and keeps missing defaults', async () => {
+  vi.mocked(window.getConfigurationValue)
+    .mockResolvedValueOnce([])
+    .mockResolvedValueOnce(['Settings > Resources'])
+    .mockResolvedValueOnce(false);
+  configurationProperties.set([]);
+  await vi.waitFor(() => {
+    expect(get(navigationRegistry).find(item => item.link === '/preferences/resources')).toMatchObject({
+      index: 0,
+      hidden: false,
+    });
+    expect(getNavigationEntry('/containers')).toMatchObject({ index: 1, hidden: false });
+  });
+  expect(window.updateConfigurationValue).not.toHaveBeenCalledWith('navbar.itemOrder', expect.anything());
+});
+
 test('preserves hidden and unavailable names when reordering visible entries', async () => {
   vi.mocked(window.getConfigurationValue)
     .mockResolvedValueOnce(['Pods'])
@@ -172,7 +190,7 @@ test('preserves hidden and unavailable names when reordering visible entries', a
   ]);
 });
 
-test('applies saved qualified-name order when Kubernetes becomes available', async () => {
+test('applies saved qualified-name order when Kubernetes becomes available alongside the Settings contexts destination', async () => {
   vi.mocked(window.getConfigurationValue)
     .mockResolvedValueOnce([])
     .mockResolvedValueOnce(['Kubernetes > Nodes'])
@@ -187,6 +205,7 @@ test('applies saved qualified-name order when Kubernetes becomes available', asy
     expect(getNavigationEntry('/kubernetes/nodes')).toMatchObject({ index: 0, hidden: false });
   });
   expect(window.updateConfigurationValue).not.toHaveBeenCalledWith('navbar.itemOrder', expect.anything());
+  expect(getNavigationEntry('/preferences/kubernetes-contexts')?.parentName).toBe('Settings');
 
   vi.mocked(window.getConfigurationValue)
     .mockResolvedValueOnce([])
@@ -195,5 +214,6 @@ test('applies saved qualified-name order when Kubernetes becomes available', asy
   configurationProperties.set([]);
   await vi.waitFor(() => {
     expect(getNavigationEntry('/kubernetes')).toBeUndefined();
+    expect(getNavigationEntry('/preferences/kubernetes-contexts')?.parentName).toBe('Settings');
   });
 });
