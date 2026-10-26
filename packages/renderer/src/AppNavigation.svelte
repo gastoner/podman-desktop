@@ -19,6 +19,7 @@ import NavItem from './lib/ui/NavItem.svelte';
 import NavRegistryEntry from './lib/ui/NavRegistryEntry.svelte';
 import { handleNavigation } from './navigation';
 import { onDidChangeConfiguration } from './stores/configurationProperties';
+import { navigationDragState } from './stores/navigation/navigation-drag-state.svelte';
 import { navigationRegistry } from './stores/navigation/navigation-registry';
 import { NavigationUtils } from './stores/navigation/navigation-utils';
 
@@ -303,4 +304,8 @@ function onDidChangeConfigurationCallback(e: Event): void {
     {@attach longPress(toggleNavWidth)}
     onpointerdown={onResizeHandlePointerDown}
     ondblclick={onResizeHandleDblClick}></div>
+
+  <div class="sr-only" role="status" aria-live="polite" aria-atomic="true" data-testid="nav-live-region">
+    {navigationDragState.announcement}
+  </div>
 </nav>
