@@ -93,6 +93,21 @@ test('Test rendering of the navigation bar with empty items', async (_arg: unkno
   expect(settings).toBeInTheDocument();
 });
 
+test('places reorder shortcut metadata on the focused navigation link', async () => {
+  const meta = { url: '/' } as unknown as TinroRouteMeta;
+  await fetchNavigationRegistries();
+
+  render(AppNavigation, {
+    meta,
+    exitSettingsCallback: () => {},
+  });
+
+  const containers = screen.getByRole('link', { name: 'Containers' });
+  expect(containers).toHaveAttribute('aria-keyshortcuts', 'Control+ArrowUp Control+ArrowDown');
+  expect(containers).toHaveAttribute('title', expect.stringContaining('Arrow to move'));
+  expect(containers.closest('[role="listitem"]')).not.toHaveAttribute('aria-keyshortcuts');
+});
+
 test('Test contributions', () => {
   const meta = {
     url: '/',
