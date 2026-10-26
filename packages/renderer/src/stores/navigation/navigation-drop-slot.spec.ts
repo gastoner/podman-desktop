@@ -16,11 +16,48 @@
  * SPDX-License-Identifier: Apache-2.0
  ***********************************************************************/
 
+import type { DropSlotRect } from '@desktop-framework/api';
 import { describe, expect, test } from 'vitest';
 
 import { NavigationDropSlot } from './navigation-drop-slot';
 
+function rect(top: number, height = 40): DropSlotRect {
+  return { top, height, bottom: top + height };
+}
+
 const navigationDropSlot = new NavigationDropSlot();
+
+describe('NavigationDropSlot.getDropSlot', () => {
+  const rects = [rect(100), rect(150), rect(200)];
+  const containerTop = 100;
+
+  test('returns insert-before index and indicator at item top when pointer is above midpoint', () => {
+    expect(navigationDropSlot.getDropSlot(110, rects, containerTop)).toEqual({ index: 0, indicatorY: 0 });
+    expect(navigationDropSlot.getDropSlot(160, rects, containerTop)).toEqual({ index: 1, indicatorY: 50 });
+  });
+
+  test('returns next slot when pointer is at or past an item midpoint', () => {
+    expect(navigationDropSlot.getDropSlot(120, rects, containerTop)).toEqual({ index: 1, indicatorY: 50 });
+    expect(navigationDropSlot.getDropSlot(170, rects, containerTop)).toEqual({ index: 2, indicatorY: 100 });
+  });
+
+  test('returns after-last slot with indicator at last bottom', () => {
+    expect(navigationDropSlot.getDropSlot(300, rects, containerTop)).toEqual({ index: 3, indicatorY: 140 });
+  });
+
+  test('returns slot 0 when there are no items', () => {
+    expect(navigationDropSlot.getDropSlot(50, [], 0)).toEqual({ index: 0, indicatorY: 0 });
+  });
+});
+
+describe('NavigationDropSlot.keepsItemInPlace', () => {
+  test('returns true for either adjacent slot that leaves the item in place', () => {
+    expect(navigationDropSlot.keepsItemInPlace(2, 2)).toBe(true);
+    expect(navigationDropSlot.keepsItemInPlace(2, 3)).toBe(true);
+    expect(navigationDropSlot.keepsItemInPlace(2, 1)).toBe(false);
+    expect(navigationDropSlot.keepsItemInPlace(2, 4)).toBe(false);
+  });
+});
 
 describe('NavigationDropSlot.insertOrMoveAtSlot', () => {
   test('moves existing items up and down within the list', () => {

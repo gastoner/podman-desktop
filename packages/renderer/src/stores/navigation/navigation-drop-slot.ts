@@ -16,7 +16,25 @@
  * SPDX-License-Identifier: Apache-2.0
  ***********************************************************************/
 
+import type { DropSlot, DropSlotRect } from '@desktop-framework/api';
+
 export class NavigationDropSlot {
+  // Index `i` inserts before item `i`; `rects.length` inserts after the last item.
+  getDropSlot(clientY: number, rects: DropSlotRect[], containerTop: number): DropSlot {
+    for (const [index, rect] of rects.entries()) {
+      if (clientY < rect.top + rect.height / 2) {
+        return { index, indicatorY: rect.top - containerTop };
+      }
+    }
+    const lastRect = rects.at(-1);
+    return { index: rects.length, indicatorY: lastRect ? lastRect.bottom - containerTop : 0 };
+  }
+
+  // The slots immediately before and after an item leave its position unchanged.
+  keepsItemInPlace(sourceIndex: number, dropSlotIndex: number): boolean {
+    return dropSlotIndex === sourceIndex || dropSlotIndex === sourceIndex + 1;
+  }
+
   // Add a new item or move an existing item to an insert-before slot.
   insertOrMoveAtSlot(itemNames: string[], itemName: string, dropSlotIndex: number): string[] {
     const result = [...itemNames];
