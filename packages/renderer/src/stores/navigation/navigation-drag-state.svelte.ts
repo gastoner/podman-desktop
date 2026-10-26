@@ -16,6 +16,8 @@
  * SPDX-License-Identifier: Apache-2.0
  ***********************************************************************/
 
+export const LONG_PRESS_MS = 350;
+
 /**
  * Shared state for screen reader announcements of main navigation changes.
  */

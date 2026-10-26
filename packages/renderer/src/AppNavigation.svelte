@@ -3,8 +3,10 @@
 <!-- Native scrollbar hidden via Tailwind (no layout space); overlay thumb on hover. -->
 
 <script lang="ts">
-import { NavigationPage } from '@desktop-framework/api';
+import { type DropSlot, NavigationPage } from '@desktop-framework/api';
 import { AppearanceSettings } from '@desktop-framework/api/appearance';
+import type { IconType } from '@podman-desktop/ui-svelte';
+import { Icon } from '@podman-desktop/ui-svelte/icons';
 import { onDestroy, onMount, tick } from 'svelte';
 import type { TinroRouteMeta } from 'tinro';
 
@@ -19,8 +21,9 @@ import NavItem from './lib/ui/NavItem.svelte';
 import NavRegistryEntry from './lib/ui/NavRegistryEntry.svelte';
 import { handleNavigation } from './navigation';
 import { onDidChangeConfiguration } from './stores/configurationProperties';
-import { navigationDragState } from './stores/navigation/navigation-drag-state.svelte';
+import { LONG_PRESS_MS, navigationDragState } from './stores/navigation/navigation-drag-state.svelte';
 import { NavigationDropSlot } from './stores/navigation/navigation-drop-slot';
+import type { NavigationRegistryEntry } from './stores/navigation/navigation-registry';
 import { navigationRegistry, setNavigationItemOrder } from './stores/navigation/navigation-registry';
 import { NavigationUtils } from './stores/navigation/navigation-utils';
 
@@ -35,6 +38,7 @@ const navigationDropSlot = new NavigationDropSlot();
 let authActions = $state<AuthActions>();
 let outsideWindow = $state<HTMLDivElement>();
 let scrollRegionEl = $state<HTMLDivElement>();
+let navEl = $state<HTMLElement>();
 
 const iconSize = '24';
 const NAV_BAR_WIDTH_KEY = `${AppearanceSettings.SectionName}.${AppearanceSettings.NavigationBarWidth}`;
@@ -51,12 +55,137 @@ let modifierC: string = $derived(isMac ? '⌘' : 'Ctrl+');
 let reorderKeyShortcuts = $derived(isMac ? 'Meta+ArrowUp Meta+ArrowDown' : 'Control+ArrowUp Control+ArrowDown');
 
 let dragContainerEl = $state<HTMLDivElement>();
+let reorderSourceIndex = $state<number | undefined>();
+let isReorderDragging = $derived(reorderSourceIndex !== undefined);
+let reorderPointerClientY = $state(0);
+let reorderPointerOffsetY = $state(0);
+let pressedReorderItem: HTMLElement | undefined;
+let reorderPointerId = 0;
 
 // Single main-nav list sorted by index (defaults and pinned share one sequence)
 let allVisibleEntries = $derived(navigationUtils.getVisibleOrderedEntries($navigationRegistry));
 let visibleItemNames = $derived(
   allVisibleEntries.map(entry => navigationUtils.formatNavigationName(entry.name, entry.parentName)),
 );
+
+interface DragGhostIcon {
+  icon: IconType;
+  size?: string | number;
+}
+
+function resolveNavIcon(entryIcon: NavigationRegistryEntry['icon']): DragGhostIcon | undefined {
+  if (entryIcon?.faIcon) {
+    return { icon: entryIcon.faIcon.definition, size: entryIcon.faIcon.size };
+  }
+  if (entryIcon?.iconComponent) {
+    return { icon: entryIcon.iconComponent, size: '24' };
+  }
+  if (entryIcon?.iconImage) {
+    return { icon: entryIcon.iconImage, size: 22 };
+  }
+  return undefined;
+}
+
+// Ghost preview for pin-drags and internal reorder: same icon/name as the main nav row.
+let dragGhost = $derived.by((): { name: string; icon?: DragGhostIcon } | undefined => {
+  if (reorderSourceIndex !== undefined) {
+    const entry = allVisibleEntries[reorderSourceIndex];
+    if (entry) {
+      return {
+        name: navigationUtils.formatNavigationName(entry.name, entry.parentName),
+        icon: resolveNavIcon(entry.icon),
+      };
+    }
+  }
+  return undefined;
+});
+
+let ghostPointerY = $derived(reorderPointerClientY - reorderPointerOffsetY);
+let ghostPointerX = $derived(navEl?.getBoundingClientRect().left ?? 0);
+
+let dropSlotIndex = $state<number | undefined>();
+let dropIndicatorOffsetY = $state(0);
+let showDropLine = $derived(
+  dropSlotIndex !== undefined &&
+    reorderSourceIndex !== undefined &&
+    !navigationDropSlot.keepsItemInPlace(reorderSourceIndex, dropSlotIndex),
+);
+
+function getDropSlotAtPointerY(pointerClientY: number): DropSlot {
+  if (!dragContainerEl) {
+    return { index: allVisibleEntries.length, indicatorY: 0 };
+  }
+  const items = [...dragContainerEl.querySelectorAll<HTMLElement>('[data-nav-drag-item]')];
+  const containerTop = dragContainerEl.getBoundingClientRect().top;
+  const rects = items.map(c => c.getBoundingClientRect());
+  return navigationDropSlot.getDropSlot(pointerClientY, rects, containerTop);
+}
+
+// Update the drop line for either an external pin drag or an in-list reorder.
+function updateDropTargetAtPointerY(pointerClientY: number): void {
+  const dropSlot = getDropSlotAtPointerY(pointerClientY);
+  dropSlotIndex = dropSlot.index;
+  dropIndicatorOffsetY = dropSlot.indicatorY;
+}
+
+const EDGE_SCROLL_PX = 40;
+const EDGE_SCROLL_STEP = 12;
+
+// Scroll the nav list when dragging near its top/bottom edge.
+function scrollNavigationAtDragEdge(pointerClientY: number): void {
+  const el = scrollRegionEl;
+  if (!el) return;
+  const rect = el.getBoundingClientRect();
+  if (pointerClientY < rect.top + EDGE_SCROLL_PX) {
+    el.scrollTop = Math.max(0, el.scrollTop - EDGE_SCROLL_STEP);
+  } else if (pointerClientY > rect.bottom - EDGE_SCROLL_PX) {
+    el.scrollTop = Math.min(el.scrollHeight - el.clientHeight, el.scrollTop + EDGE_SCROLL_STEP);
+  }
+}
+
+function updateNavigationDropTarget(e: PointerEvent): void {
+  scrollNavigationAtDragEdge(e.clientY);
+  updateDropTargetAtPointerY(e.clientY);
+}
+
+function onReorderPointerDown(e: PointerEvent): void {
+  if (e.button > 0) return;
+  pressedReorderItem = e.currentTarget as HTMLElement;
+  reorderPointerId = e.pointerId;
+  reorderPointerClientY = e.clientY;
+  const rect = pressedReorderItem.getBoundingClientRect();
+  reorderPointerOffsetY = e.clientY - rect.top;
+}
+
+function startNavigationItemReorder(sourceIndex: number): void {
+  if (!dragContainerEl) return;
+  reorderSourceIndex = sourceIndex;
+  updateDropTargetAtPointerY(reorderPointerClientY);
+  document.body.style.cursor = 'grabbing';
+  pressedReorderItem?.setPointerCapture(reorderPointerId);
+}
+
+function onReorderPointerMove(e: PointerEvent): void {
+  if (reorderSourceIndex === undefined) return;
+  reorderPointerClientY = e.clientY;
+  updateNavigationDropTarget(e);
+}
+
+function onReorderPointerUp(): void {
+  if (reorderSourceIndex === undefined) return;
+  if (dropSlotIndex !== undefined && !navigationDropSlot.keepsItemInPlace(reorderSourceIndex, dropSlotIndex)) {
+    moveNavigationItemToSlot(reorderSourceIndex, dropSlotIndex);
+  }
+  resetReorderDrag();
+}
+
+function resetReorderDrag(): void {
+  reorderSourceIndex = undefined;
+  dropSlotIndex = undefined;
+  pressedReorderItem = undefined;
+  reorderPointerOffsetY = 0;
+  document.body.style.cursor = '';
+}
 
 // Commit at the requested slot (before an item, or after the last item).
 function moveNavigationItemToSlot(sourceIndex: number, dropSlotIndex: number): void {
@@ -68,6 +197,10 @@ function moveNavigationItemToSlot(sourceIndex: number, dropSlotIndex: number): v
   setNavigationItemOrder(newOrder);
   const newPos = newOrder.indexOf(movedItemName) + 1;
   navigationDragState.announcement = `Moved ${movedItemName} to position ${newPos} of ${newOrder.length}`;
+}
+
+function onReorderContextMenu(e: Event): void {
+  if (isReorderDragging) e.preventDefault();
 }
 
 // --- Keyboard reorder: modifier+Arrow to move focused nav item ---
@@ -231,6 +364,7 @@ onDestroy(() => {
   window.removeEventListener('pointerup', onResizeUp);
   isDragging = false;
   scrollRegionCleanup?.();
+  document.body.style.cursor = '';
 });
 
 function handleClick(): void {
@@ -256,9 +390,10 @@ function onDidChangeConfigurationCallback(e: Event): void {
 
 <svelte:window onkeydown={onKeyDown} />
 <nav
+  bind:this={navEl}
   class="group w-leftnavbar relative h-full flex-shrink-0 flex flex-col bg-[var(--pd-global-nav-bg)] border-[var(--pd-global-nav-bg-border)] border-r-[1px]"
   aria-label="AppNavigation"
-  class:select-none={isDragging}
+  class:select-none={isDragging || isReorderDragging}
   style:width="{navWidth}px">
   <NavItem href="/" tooltip="Dashboard" bind:meta={meta} {expanded}>
     <div class="flex items-center w-full">
@@ -282,18 +417,35 @@ function onDidChangeConfigurationCallback(e: Event): void {
       role="region"
       aria-label="Scrollable navigation list"
       onscroll={onScrollRegionScroll}
-      onpointerdown={onScrollRegionPointerDown}>
+      onpointerdown={onScrollRegionPointerDown}
+      onpointermove={onReorderPointerMove}
+      onpointerup={onReorderPointerUp}
+      onpointercancel={resetReorderDrag}>
       <div bind:this={dragContainerEl} class="flex flex-col relative" role="list">
-        {#each allVisibleEntries as entry (entry.link)}
-          <div data-nav-drag-item role="listitem">
+        {#each allVisibleEntries as entry, i (entry.link)}
+          <div
+            data-nav-drag-item
+            role="listitem"
+            class="touch-none select-none cursor-grab"
+            class:opacity-50={isReorderDragging && reorderSourceIndex === i}
+            class:[&_.tooltip-content]:hidden={isReorderDragging}
+            onpointerdown={onReorderPointerDown}
+            oncontextmenu={onReorderContextMenu}
+            {@attach longPress(startNavigationItemReorder.bind(undefined, i), 0, LONG_PRESS_MS)}>
             <NavRegistryEntry
               {entry}
               bind:meta={meta}
               {expanded}
               aria-keyshortcuts={reorderKeyShortcuts}
-              title={`${modifierC}Arrow to move`} />
+              title={isReorderDragging ? undefined : `Hold to reorder. ${modifierC}Arrow to move`} />
           </div>
         {/each}
+        {#if showDropLine}
+          <div
+            class="absolute left-2 right-2 h-0.5 rounded-full pointer-events-none z-20 bg-[var(--pd-global-nav-icon-selected-highlight)]"
+            style:top="{dropIndicatorOffsetY}px"
+            aria-hidden="true"></div>
+        {/if}
       </div>
     </div>
     {#if scrollThumbVisible}
@@ -359,6 +511,29 @@ function onDidChangeConfigurationCallback(e: Event): void {
     {@attach longPress(toggleNavWidth)}
     onpointerdown={onResizeHandlePointerDown}
     ondblclick={onResizeHandleDblClick}></div>
+
+  {#if dragGhost}
+    <div
+      class="fixed pointer-events-none z-50 shadow-lg opacity-90 scale-[1.03] bg-(--pd-global-nav-bg) text-(--pd-global-nav-icon-selected) border border-(--pd-global-nav-bg-border)"
+      style:top="{ghostPointerY}px"
+      style:left="{ghostPointerX}px"
+      style:width="{navWidth}px"
+      aria-hidden="true"
+      data-testid="nav-drag-ghost">
+      <div class="flex py-2 px-2.5 items-center min-h-9">
+        <div class="flex items-center w-full min-w-0">
+          <div class="relative flex w-6 shrink-0 items-center justify-center text-(--pd-global-nav-icon-selected)">
+            {#if dragGhost.icon}
+              <Icon icon={dragGhost.icon.icon} size={dragGhost.icon.size} ariaHidden />
+            {/if}
+          </div>
+          {#if expanded}
+            <div class="text-sm truncate ml-3 flex-1 min-w-0">{dragGhost.name}</div>
+          {/if}
+        </div>
+      </div>
+    </div>
+  {/if}
 
   <div class="sr-only" role="status" aria-live="polite" aria-atomic="true" data-testid="nav-live-region">
     {navigationDragState.announcement}
