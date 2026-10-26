@@ -16,12 +16,38 @@
  * SPDX-License-Identifier: Apache-2.0
  ***********************************************************************/
 
-import { describe, expect, test } from 'vitest';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 
-import type { NavigationRegistryEntry } from './navigation-registry';
+import { navigationDragState } from './navigation-drag-state.svelte';
+import { navigationRegistry, type NavigationRegistryEntry, pinToNavbar } from './navigation-registry';
 import { NavigationUtils } from './navigation-utils';
 
+vi.mock(import('./navigation-registry'), async () => {
+  const { writable } = await import('svelte/store');
+  function entry(name: string, link: string, parentName?: string): NavigationRegistryEntry {
+    return { name, link, parentName, tooltip: name, icon: {}, counter: 0, destinations: [], type: 'entry' };
+  }
+  return {
+    pinToNavbar: vi.fn(),
+    navigationRegistry: writable([
+      { ...entry('Kubernetes', '/kubernetes'), type: 'submenu', items: [entry('Nodes', '/kubernetes/nodes')] },
+      { ...entry('Tools', '/tools'), type: 'submenu', items: [entry('Nodes', '/tools/nodes')] },
+      entry('Resources', '/preferences/resources', 'Settings'),
+      entry('X', '/x', 'Settings'),
+    ] satisfies NavigationRegistryEntry[]),
+  };
+});
+
 const navigationUtils = new NavigationUtils();
+const pinningContext = { navigationRegistry, pinToNavbar };
+let pinningUtils = new NavigationUtils(pinningContext);
+
+beforeEach(() => {
+  vi.resetAllMocks();
+  navigationDragState.announcement = '';
+  pinningUtils = new NavigationUtils(pinningContext);
+  vi.mocked(pinToNavbar).mockReturnValue(1);
+});
 
 function makeEntry(
   name: string,
@@ -109,5 +135,49 @@ describe('findNavigationEntryByLink', () => {
       parentName: 'Kubernetes',
     });
     expect(navigationUtils.findNavigationEntryByLink(entries, '/unknown')).toBeUndefined();
+  });
+});
+
+describe('pinning without a registry context', () => {
+  test('pin methods are inert when no pin context is provided', () => {
+    const utility = new NavigationUtils();
+    const event = new KeyboardEvent('keydown', { key: 'ArrowLeft', ctrlKey: true, cancelable: true });
+
+    utility.onPinKeyDown({ name: 'Nodes', link: '/kubernetes/nodes' }, event);
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(pinToNavbar).not.toHaveBeenCalled();
+  });
+});
+
+describe('onPinKeyDown', () => {
+  test('announces the registered destination and ignores unsuccessful pins', () => {
+    const event = new KeyboardEvent('keydown', { key: 'ArrowLeft', metaKey: true });
+    pinningUtils.onPinKeyDown({ name: 'Other label', link: '/tools/nodes' }, event);
+    expect(navigationDragState.announcement).toBe('Pinned Tools > Nodes to main navigation at position 1');
+
+    navigationDragState.announcement = '';
+    vi.mocked(pinToNavbar).mockReturnValue(undefined);
+    pinningUtils.onPinKeyDown({ name: 'Nodes', link: '/tools/nodes' }, event);
+    expect(navigationDragState.announcement).toBe('');
+    pinningUtils.onPinKeyDown({ name: 'Unknown', link: '/unknown' }, event);
+    expect(pinToNavbar).toHaveBeenCalledTimes(2);
+  });
+
+  test('pins with Ctrl+ArrowLeft and announces the result', () => {
+    const event = new KeyboardEvent('keydown', { key: 'ArrowLeft', ctrlKey: true, cancelable: true });
+
+    pinningUtils.onPinKeyDown({ name: 'Settings > Resources', link: '/preferences/resources' }, event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(navigationDragState.announcement).toContain('Settings > Resources');
+  });
+
+  test('ignores ArrowLeft without a modifier', () => {
+    const event = new KeyboardEvent('keydown', { key: 'ArrowLeft', cancelable: true });
+
+    pinningUtils.onPinKeyDown({ name: 'Settings > Resources', link: '/preferences/resources' }, event);
+
+    expect(event.defaultPrevented).toBe(false);
   });
 });

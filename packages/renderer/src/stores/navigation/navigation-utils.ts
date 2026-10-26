@@ -16,9 +16,22 @@
  * SPDX-License-Identifier: Apache-2.0
  ***********************************************************************/
 
+import type { DragPayload } from '@desktop-framework/api';
+import { get, type Readable } from 'svelte/store';
+
+import { navigationDragState } from './navigation-drag-state.svelte';
 import type { NavigationRegistryEntry } from './navigation-registry';
 
+interface NavigationPinContext {
+  navigationRegistry: Readable<NavigationRegistryEntry[]>;
+  pinToNavbar: (payload: DragPayload) => number | undefined;
+}
+
 export class NavigationUtils {
+  static readonly KEY_SHORTCUTS = 'Control+ArrowLeft Meta+ArrowLeft';
+
+  constructor(private readonly pinContext?: NavigationPinContext) {}
+
   formatNavigationName(name: string, parentName?: string): string {
     return parentName ? `${parentName} > ${name}` : name;
   }
@@ -70,4 +83,25 @@ export class NavigationUtils {
       .filter(entry => !entry.hidden && entry.index !== undefined)
       .toSorted((a, b) => (a.index ?? 0) - (b.index ?? 0));
   }
+
+  onPinKeyDown = (payload: DragPayload, event: KeyboardEvent): void => {
+    if (event.key !== 'ArrowLeft' || (!event.ctrlKey && !event.metaKey)) {
+      return;
+    }
+    const pinContext = this.pinContext;
+    if (!pinContext) {
+      return;
+    }
+    event.preventDefault();
+    const entry = this.findNavigationEntryByLink(get(pinContext.navigationRegistry), payload.link);
+    if (!entry) {
+      return;
+    }
+    const result = pinContext.pinToNavbar(payload);
+    if (result === undefined) {
+      return;
+    }
+    const name = this.formatNavigationName(entry.name, entry.parentName);
+    navigationDragState.announcement = `Pinned ${name} to main navigation at position ${result}`;
+  };
 }

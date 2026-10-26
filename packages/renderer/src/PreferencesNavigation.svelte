@@ -1,5 +1,5 @@
 <script lang="ts">
-import { DockerCompatibilitySettings } from '@desktop-framework/api';
+import { DockerCompatibilitySettings, type DragPayload } from '@desktop-framework/api';
 import { CONFIGURATION_DEFAULT_SCOPE } from '@desktop-framework/api/configuration';
 import { SettingsNavItem } from '@podman-desktop/ui-svelte';
 import { onMount, tick } from 'svelte';
@@ -8,6 +8,8 @@ import type { TinroRouteMeta } from 'tinro';
 import PreferencesIcon from '/@/lib/images/PreferencesIcon.svelte';
 import ShortcutArrowIcon from '/@/lib/images/ShortcutArrowIcon.svelte';
 import { type NavItem, settingsNavigationEntries, type SettingsNavItemConfig } from '/@/PreferencesNavigation';
+import { navigationRegistry, pinToNavbar } from '/@/stores/navigation/navigation-registry';
+import { NavigationUtils } from '/@/stores/navigation/navigation-utils';
 
 import { configurationProperties } from './stores/configurationProperties';
 import { onDidChangeRegisteredFeatures, registeredFeatures } from './stores/registered-features';
@@ -17,6 +19,7 @@ interface Props {
 }
 
 let { meta }: Props = $props();
+const navigationUtils = new NavigationUtils({ navigationRegistry, pinToNavbar });
 
 let configProperties: Map<string, NavItem[]> = $state(new Map<string, NavItem[]>());
 let sectionExpanded: { [key: string]: boolean } = $state(
@@ -256,6 +259,14 @@ onMount(() => {
     onDidChangeRegisteredFeatures.removeEventListener(kubernetesContextsManagerFeature, featureListener);
   };
 });
+
+function createSettingsPinPayload(name: string, link: string): DragPayload {
+  return { name: navigationUtils.formatNavigationName(name, 'Settings'), link };
+}
+
+function onSettingsPinKeyDown(name: string, link: string, event: KeyboardEvent): void {
+  navigationUtils.onPinKeyDown(createSettingsPinPayload(name, link), event);
+}
 </script>
 
 <nav
@@ -282,6 +293,8 @@ onMount(() => {
           section={visibleChildren.length > 0}
           selected={meta.url === navItem.href && !visibleChildren.some(c => c.href === meta.url)}
           onClick={scheduleNavigationWidthUpdate}
+          ariaKeyShortcuts={NavigationUtils.KEY_SHORTCUTS}
+          onKeyDown={onSettingsPinKeyDown.bind(undefined, navItem.title, navItem.href)}
           bind:expanded={sectionExpanded[navItem.title]} />
         {#if sectionExpanded[navItem.title]}
           {#each visibleChildren as child (child.href)}
@@ -291,7 +304,9 @@ onMount(() => {
               icon={child.icon}
               child={true}
               selected={meta.url === child.href}
-              onClick={scheduleNavigationWidthUpdate} />
+              onClick={scheduleNavigationWidthUpdate}
+              ariaKeyShortcuts={NavigationUtils.KEY_SHORTCUTS}
+              onKeyDown={onSettingsPinKeyDown.bind(undefined, child.title, child.href)} />
           {/each}
         {/if}
       {/if}
@@ -328,6 +343,8 @@ onMount(() => {
       href="/troubleshooting/repair-connections"
       onClick={scheduleNavigationWidthUpdate}
       selected={meta.url === '/troubleshooting/repair-connections'}
+      ariaKeyShortcuts={NavigationUtils.KEY_SHORTCUTS}
+      onKeyDown={onSettingsPinKeyDown.bind(undefined, 'Troubleshooting', '/troubleshooting/repair-connections')}
     />
   </div>
 </nav>
