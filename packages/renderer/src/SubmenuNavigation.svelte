@@ -1,9 +1,12 @@
 <script lang="ts">
+import type { DragPayload } from '@desktop-framework/api';
 import { SettingsNavItem } from '@podman-desktop/ui-svelte';
 import type { TinroRouteMeta } from 'tinro';
 
 import { lastSubmenuPages } from './stores/breadcrumb';
 import type { NavigationRegistryEntry } from './stores/navigation/navigation-registry';
+import { navigationRegistry, pinToNavbar } from './stores/navigation/navigation-registry';
+import { NavigationUtils } from './stores/navigation/navigation-utils';
 
 interface Props {
   title: string;
@@ -13,11 +16,20 @@ interface Props {
 }
 
 let { title, items, link, meta }: Props = $props();
+const navigationUtils = new NavigationUtils({ navigationRegistry, pinToNavbar });
 
 let pages = $lastSubmenuPages;
 if (!pages[title]) {
   pages[title] = link;
   lastSubmenuPages.set(pages);
+}
+
+function createSubmenuPinPayload(item: NavigationRegistryEntry): DragPayload {
+  return { name: navigationUtils.formatNavigationName(item.name, title), link: item.link };
+}
+
+function onSubmenuPinKeyDown(item: NavigationRegistryEntry, event: KeyboardEvent): void {
+  navigationUtils.onPinKeyDown(createSubmenuPinPayload(item), event);
 }
 </script>
 
@@ -35,6 +47,7 @@ if (!pages[title]) {
   <div class="h-full overflow-y-auto" style="margin-bottom:auto">
     {#each items ?? [] as item, index (index)}
       <SettingsNavItem title={item.tooltip} href={item.link} selected={meta.url.startsWith(item.link)} onClick={(): string => pages[title] = item.link}
+        ariaKeyShortcuts={NavigationUtils.KEY_SHORTCUTS} onKeyDown={onSubmenuPinKeyDown.bind(undefined, item)}
       ></SettingsNavItem>
     {/each}
   </div>

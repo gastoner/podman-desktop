@@ -16,7 +16,7 @@
  * SPDX-License-Identifier: Apache-2.0
  ***********************************************************************/
 
-import type { DisplayItem, GoToInfo } from '@desktop-framework/api';
+import type { DisplayItem, DragPayload, GoToInfo } from '@desktop-framework/api';
 import type { IconDefinition } from '@fortawesome/fontawesome-common-types';
 import type { Component } from 'svelte';
 import { type Writable, writable } from 'svelte/store';
@@ -134,6 +134,25 @@ const navigationRegistryEventStoreInfo = navigationRegistryEventStore.setup();
 export const fetchNavigationRegistries = async (): Promise<void> => {
   await navigationRegistryEventStoreInfo.fetch();
 };
+
+export function pinToNavbar(payload: DragPayload): number | undefined {
+  const entry = navigationUtils.findNavigationEntryByLink(values, payload.link);
+  if (!entry) {
+    return undefined;
+  }
+  const identifier = navigationUtils.formatNavigationName(entry.name, entry.parentName);
+
+  const currentOrder = navigationUtils
+    .getVisibleOrderedEntries(values)
+    .map(entry => navigationUtils.formatNavigationName(entry.name, entry.parentName));
+  const existingIndex = currentOrder.indexOf(identifier);
+  if (existingIndex !== -1) {
+    return existingIndex + 1;
+  }
+
+  setNavigationItemOrder([identifier, ...currentOrder]);
+  return 1;
+}
 
 function assignNavigationIndices(
   navigationRegistryEntry: NavigationRegistryEntry,

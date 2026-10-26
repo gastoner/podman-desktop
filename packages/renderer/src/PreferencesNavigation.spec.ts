@@ -29,6 +29,11 @@ import PreferencesNavigation from './PreferencesNavigation.svelte';
 import { configurationProperties } from './stores/configurationProperties';
 import { onDidChangeRegisteredFeatures, registeredFeatures } from './stores/registered-features';
 
+vi.mock(import('./stores/navigation/navigation-registry'), async () => {
+  const { writable } = await import('svelte/store');
+  return { navigationRegistry: writable([]), pinToNavbar: vi.fn() };
+});
+
 const DEFAULT_META = {
   url: '/',
 } as unknown as TinroRouteMeta;
@@ -166,6 +171,30 @@ test('Test rendering of the preferences navigation bar and its items', () => {
   const authentication = screen.getByRole('link', { name: 'Authentication' });
   expect(authentication).toBeVisible();
   // ToDo: adding configuration section/items mocks for preferences, issue #2966
+});
+
+test('static Settings entries expose the pin shortcut and generated Preferences entries do not', async () => {
+  configurationProperties.set([
+    {
+      id: 'appearance.theme',
+      title: 'Appearance',
+      default: 'system',
+      parentId: 'preferences.appearance',
+      type: 'string',
+      scope: 'DEFAULT',
+    },
+  ]);
+
+  renderPreferencesNavigation();
+
+  expect(screen.getByRole('link', { name: 'Resources' })).toHaveAttribute(
+    'aria-keyshortcuts',
+    'Control+ArrowLeft Meta+ArrowLeft',
+  );
+  const preferencesLink = screen.getByRole('link', { name: /preferences/i });
+  expect(preferencesLink).not.toHaveAttribute('aria-keyshortcuts');
+  await fireEvent.click(preferencesLink);
+  expect(screen.getByRole('link', { name: 'Appearance' })).not.toHaveAttribute('aria-keyshortcuts');
 });
 
 test('Test rendering of the compatibility docker pag if config is available', async () => {

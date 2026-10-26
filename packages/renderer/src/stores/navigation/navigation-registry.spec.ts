@@ -25,6 +25,7 @@ import {
   fetchNavigationRegistries,
   navigationRegistry,
   type NavigationRegistryEntry,
+  pinToNavbar,
   setNavigationItemOrder,
 } from './navigation-registry';
 import { createNavigationExtensionEntry, createNavigationExtensionGroup } from './navigation-registry-extension.svelte';
@@ -170,6 +171,89 @@ test('preserves hidden and unavailable names when reordering visible entries', a
     'Extensions',
     'Plugin',
   ]);
+});
+
+test('pins a new submenu child by its registered route and resets it without recreating entries', async () => {
+  const tools = getNavigationEntry('/tools');
+  expect(pinToNavbar({ name: 'Wrong label', link: '/tools/nodes' })).toBe(1);
+  expect(window.updateConfigurationValue).toHaveBeenLastCalledWith('navbar.itemOrder', [
+    'Tools > Nodes',
+    'Containers',
+    'Pods',
+    'Images',
+    'Volumes',
+    'Networks',
+    'Tools',
+    'Extensions',
+    'Plugin',
+  ]);
+  await vi.waitFor(() =>
+    expect(new NavigationUtils().getVisibleOrderedEntries(get(navigationRegistry))[0]).toMatchObject({
+      name: 'Nodes',
+      parentName: 'Tools',
+      link: '/tools/nodes',
+      icon: { iconImage: 'tools.svg' },
+    }),
+  );
+  vi.mocked(window.updateConfigurationValue).mockClear();
+  expect(pinToNavbar({ name: 'Nodes', link: '/tools/nodes' })).toBe(1);
+  expect(window.updateConfigurationValue).not.toHaveBeenCalled();
+
+  setNavigationItemOrder([]);
+  await vi.waitFor(() => expect(getNavigationEntry('/tools/nodes')).toMatchObject({ index: undefined, hidden: true }));
+  expect(getNavigationEntry('/tools')).toBe(tools);
+});
+
+test('preserves hidden and unavailable names when pinning and reordering visible entries', async () => {
+  vi.mocked(window.getConfigurationValue)
+    .mockResolvedValueOnce(['Pods'])
+    .mockResolvedValueOnce(['Containers', 'Pods', 'Unavailable', 'Tools'])
+    .mockResolvedValueOnce(false);
+  configurationProperties.set([]);
+  await vi.waitFor(() => expect(getNavigationEntry('/pods')?.hidden).toBe(true));
+
+  pinToNavbar({ name: 'Nodes', link: '/tools/nodes' });
+  expect(window.updateConfigurationValue).toHaveBeenLastCalledWith('navbar.itemOrder', [
+    'Tools > Nodes',
+    'Pods',
+    'Unavailable',
+    'Containers',
+    'Tools',
+    'Images',
+    'Volumes',
+    'Networks',
+    'Extensions',
+    'Plugin',
+  ]);
+  setNavigationItemOrder([
+    'Containers',
+    'Tools > Nodes',
+    'Tools',
+    'Images',
+    'Volumes',
+    'Networks',
+    'Extensions',
+    'Plugin',
+  ]);
+  expect(window.updateConfigurationValue).toHaveBeenLastCalledWith('navbar.itemOrder', [
+    'Containers',
+    'Pods',
+    'Unavailable',
+    'Tools > Nodes',
+    'Tools',
+    'Images',
+    'Volumes',
+    'Networks',
+    'Extensions',
+    'Plugin',
+  ]);
+});
+
+test('does not register destinations from unknown pin payloads', () => {
+  const payload = { name: 'Settings > Generated setting', link: '/preferences/default/generated' };
+  expect(pinToNavbar(payload)).toBeUndefined();
+  expect(getNavigationEntry(payload.link)).toBeUndefined();
+  expect(window.updateConfigurationValue).not.toHaveBeenCalled();
 });
 
 test('applies saved qualified-name order when Kubernetes becomes available', async () => {
