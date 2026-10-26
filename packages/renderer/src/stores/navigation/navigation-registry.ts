@@ -32,6 +32,7 @@ import { createNavigationKubernetesGroup } from './navigation-registry-kubernete
 import { createNavigationNetworkEntry } from './navigation-registry-network.svelte';
 import { createNavigationPodEntry } from './navigation-registry-pod.svelte';
 import { createNavigationSecretEntry } from './navigation-registry-secret.svelte';
+import { createNavigationSettingsEntries } from './navigation-registry-settings.svelte';
 import { createNavigationVolumeEntry } from './navigation-registry-volume.svelte';
 import { NavigationUtils } from './navigation-utils';
 
@@ -75,6 +76,7 @@ const init = (): void => {
   values.push(createNavigationSecretEntry());
   values.push(createNavigationExtensionEntry());
   values.push(createNavigationExtensionGroup());
+  values.push(...createNavigationSettingsEntries());
   handleKubernetesGroup();
   hideItems().catch((err: unknown) => console.error('Error hiding navigation items', err));
 };
@@ -252,14 +254,14 @@ function handleKubernetesGroup(): void {
     .getConfigurationValue<boolean>('kubernetes.useInternalKubernetes')
     ?.then(value => {
       if (value) {
-        if (!values.find(item => item.name === 'Kubernetes')) {
+        if (!values.find(item => item.name === 'Kubernetes' && item.parentName === undefined)) {
           const extensionsIndex = values.findIndex(item => item.name === 'Extensions');
           if (extensionsIndex !== -1) {
             values.splice(extensionsIndex, 0, createNavigationKubernetesGroup());
           }
         }
       } else {
-        values = values.filter(item => item.name !== 'Kubernetes');
+        values = values.filter(item => item.name !== 'Kubernetes' || item.parentName !== undefined);
       }
     })
     .then(() => hideItems())
