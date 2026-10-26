@@ -30,6 +30,14 @@ interface NavigationPinContext {
 export class NavigationUtils {
   static readonly KEY_SHORTCUTS = 'Control+ArrowLeft Meta+ArrowLeft';
 
+  private static readonly MOVE_SUPPRESS_PX = 5;
+
+  private lastPointerX = 0;
+  private lastPointerY = 0;
+  private suppressClick = false;
+  private pinStartX = 0;
+  private pinStartY = 0;
+
   constructor(private readonly pinContext?: NavigationPinContext) {}
 
   formatNavigationName(name: string, parentName?: string): string {
@@ -83,6 +91,71 @@ export class NavigationUtils {
       .filter(entry => !entry.hidden && entry.index !== undefined)
       .toSorted((a, b) => (a.index ?? 0) - (b.index ?? 0));
   }
+
+  private onWindowDragMove = (e: PointerEvent): void => {
+    navigationDragState.pointerX = e.clientX;
+    navigationDragState.pointerY = e.clientY;
+    if (!this.suppressClick) {
+      const dx = e.clientX - this.pinStartX;
+      const dy = e.clientY - this.pinStartY;
+      if (dx * dx + dy * dy > NavigationUtils.MOVE_SUPPRESS_PX * NavigationUtils.MOVE_SUPPRESS_PX) {
+        this.suppressClick = true;
+      }
+    }
+  };
+
+  resetPin = (): void => {
+    window.removeEventListener('pointermove', this.onWindowDragMove);
+    window.removeEventListener('pointerup', this.resetPin);
+    navigationDragState.payload = undefined;
+    navigationDragState.grabOffsetX = 0;
+    navigationDragState.grabOffsetY = 0;
+    document.body.style.cursor = '';
+  };
+
+  onPinPointerDown = (e: PointerEvent): void => {
+    if (e.button > 0) return;
+    this.lastPointerX = e.clientX;
+    this.lastPointerY = e.clientY;
+    const target = e.currentTarget as HTMLElement | null;
+    const rect = target?.getBoundingClientRect();
+    if (rect) {
+      navigationDragState.grabOffsetX = e.clientX - rect.left;
+      navigationDragState.grabOffsetY = e.clientY - rect.top;
+    }
+    this.suppressClick = false;
+  };
+
+  beginPin = (payload: DragPayload): void => {
+    const pinContext = this.pinContext;
+    if (!pinContext) {
+      return;
+    }
+    const entry = this.findNavigationEntryByLink(get(pinContext.navigationRegistry), payload.link);
+    if (!entry) {
+      return;
+    }
+    // Do not set suppressClick here — a still long-press must still navigate.
+    this.suppressClick = false;
+    this.pinStartX = this.lastPointerX;
+    this.pinStartY = this.lastPointerY;
+    navigationDragState.payload = { name: this.formatNavigationName(entry.name, entry.parentName), link: entry.link };
+    navigationDragState.pointerX = this.lastPointerX;
+    navigationDragState.pointerY = this.lastPointerY;
+    document.body.style.cursor = 'grabbing';
+    window.addEventListener('pointermove', this.onWindowDragMove);
+    window.addEventListener('pointerup', this.resetPin);
+  };
+
+  consumePinClick = (e: MouseEvent): boolean => {
+    if (!this.suppressClick) {
+      return false;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    this.suppressClick = false;
+    return true;
+  };
 
   onPinKeyDown = (payload: DragPayload, event: KeyboardEvent): void => {
     if (event.key !== 'ArrowLeft' || (!event.ctrlKey && !event.metaKey)) {

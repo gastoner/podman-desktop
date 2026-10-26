@@ -16,13 +16,25 @@
  * SPDX-License-Identifier: Apache-2.0
  ***********************************************************************/
 
+import type { DragPayload } from '@desktop-framework/api';
+
 export const LONG_PRESS_MS = 350;
 
 /**
- * Shared state for screen reader announcements of main navigation changes.
+ * Shared pointer/payload state while pinning from submenu or settings into the main nav.
  */
 export const navigationDragState = $state<{
+  payload?: DragPayload;
+  pointerX: number;
+  pointerY: number;
+  /** Pointer offset into the grabbed row at long-press start (no hardcoded ghost centering). */
+  grabOffsetX: number;
+  grabOffsetY: number;
   announcement: string;
 }>({
+  pointerX: 0,
+  pointerY: 0,
+  grabOffsetX: 0,
+  grabOffsetY: 0,
   announcement: '',
 });
