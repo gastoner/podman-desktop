@@ -44,6 +44,7 @@ let pinningUtils = new NavigationUtils(pinningContext);
 
 beforeEach(() => {
   vi.resetAllMocks();
+  pinningUtils.resetPin();
   navigationDragState.announcement = '';
   pinningUtils = new NavigationUtils(pinningContext);
   vi.mocked(pinToNavbar).mockReturnValue(1);
@@ -143,10 +144,130 @@ describe('pinning without a registry context', () => {
     const utility = new NavigationUtils();
     const event = new KeyboardEvent('keydown', { key: 'ArrowLeft', ctrlKey: true, cancelable: true });
 
+    utility.beginPin({ name: 'Nodes', link: '/kubernetes/nodes' });
     utility.onPinKeyDown({ name: 'Nodes', link: '/kubernetes/nodes' }, event);
 
+    expect(navigationDragState.payload).toBeUndefined();
     expect(event.defaultPrevented).toBe(false);
     expect(pinToNavbar).not.toHaveBeenCalled();
+  });
+});
+
+describe('beginPin', () => {
+  test('uses registered parent and name rather than payload labels', () => {
+    pinningUtils.beginPin({ name: 'Different tooltip', link: '/tools/nodes' });
+    expect(navigationDragState.payload).toEqual({ name: 'Tools > Nodes', link: '/tools/nodes' });
+  });
+
+  test('ignores unregistered destinations', () => {
+    pinningUtils.beginPin({ name: 'Unknown', link: '/unknown' });
+    expect(navigationDragState.payload).toBeUndefined();
+    expect(document.body.style.cursor).toBe('');
+  });
+
+  test('sets payload from last pointer position', () => {
+    const target = document.createElement('div');
+    target.getBoundingClientRect = (): DOMRect => ({
+      left: 10,
+      top: 20,
+      right: 50,
+      bottom: 60,
+      width: 40,
+      height: 40,
+      x: 10,
+      y: 20,
+      toJSON: () => ({}),
+    });
+    const down = new PointerEvent('pointerdown', { button: 0, clientX: 22, clientY: 34 });
+    Object.defineProperty(down, 'currentTarget', { value: target });
+    pinningUtils.onPinPointerDown(down);
+
+    pinningUtils.beginPin({ name: 'Kubernetes > Nodes', link: '/kubernetes/nodes' });
+
+    expect(navigationDragState.payload).toEqual({ name: 'Kubernetes > Nodes', link: '/kubernetes/nodes' });
+    expect(navigationDragState.pointerX).toBe(22);
+    expect(navigationDragState.pointerY).toBe(34);
+    expect(navigationDragState.grabOffsetX).toBe(12);
+    expect(navigationDragState.grabOffsetY).toBe(14);
+    expect(document.body.style.cursor).toBe('grabbing');
+
+    window.dispatchEvent(new PointerEvent('pointermove', { clientX: 45, clientY: 55 }));
+    expect(navigationDragState.pointerX).toBe(45);
+    expect(navigationDragState.pointerY).toBe(55);
+
+    window.dispatchEvent(new PointerEvent('pointerup'));
+    expect(navigationDragState.payload).toBeUndefined();
+    expect(navigationDragState.grabOffsetX).toBe(0);
+    expect(navigationDragState.grabOffsetY).toBe(0);
+    expect(document.body.style.cursor).toBe('');
+  });
+});
+
+describe('consumePinClick', () => {
+  test('does not swallow clicks before a long-press', () => {
+    const event = new MouseEvent('click', { cancelable: true });
+
+    expect(pinningUtils.consumePinClick(event)).toBe(false);
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  test('does not swallow clicks after a still beginPin with no movement', () => {
+    pinningUtils.onPinPointerDown(new PointerEvent('pointerdown', { button: 0, clientX: 10, clientY: 20 }));
+    pinningUtils.beginPin({ name: 'Kubernetes > Nodes', link: '/kubernetes/nodes' });
+
+    const event = new MouseEvent('click', { cancelable: true });
+    expect(pinningUtils.consumePinClick(event)).toBe(false);
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  test('swallows the click after beginPin with pointer movement and allows the next click', () => {
+    pinningUtils.onPinPointerDown(new PointerEvent('pointerdown', { button: 0, clientX: 10, clientY: 20 }));
+    pinningUtils.beginPin({ name: 'Kubernetes > Nodes', link: '/kubernetes/nodes' });
+    window.dispatchEvent(new PointerEvent('pointermove', { clientX: 30, clientY: 20 }));
+
+    const suppressed = new MouseEvent('click', { cancelable: true });
+    expect(pinningUtils.consumePinClick(suppressed)).toBe(true);
+    expect(suppressed.defaultPrevented).toBe(true);
+
+    const next = new MouseEvent('click', { cancelable: true });
+    expect(pinningUtils.consumePinClick(next)).toBe(false);
+    expect(next.defaultPrevented).toBe(false);
+  });
+
+  test('keeps click suppression local to each sidebar instance', () => {
+    const otherSidebar = new NavigationUtils(pinningContext);
+    pinningUtils.onPinPointerDown(new PointerEvent('pointerdown', { button: 0, clientX: 10, clientY: 20 }));
+    pinningUtils.beginPin({ name: 'Settings > Resources', link: '/preferences/resources' });
+    window.dispatchEvent(new PointerEvent('pointermove', { clientX: 30, clientY: 20 }));
+
+    expect(pinningUtils.consumePinClick(new MouseEvent('click', { cancelable: true }))).toBe(true);
+    expect(otherSidebar.consumePinClick(new MouseEvent('click', { cancelable: true }))).toBe(false);
+
+    otherSidebar.resetPin();
+  });
+
+  test.each([
+    { distance: 5, shouldSuppress: false },
+    { distance: 6, shouldSuppress: true },
+  ])('uses the movement threshold at $distance pixels', ({ distance, shouldSuppress }) => {
+    pinningUtils.onPinPointerDown(new PointerEvent('pointerdown', { button: 0, clientX: 10, clientY: 20 }));
+    pinningUtils.beginPin({ name: 'Settings > Resources', link: '/preferences/resources' });
+    window.dispatchEvent(new PointerEvent('pointermove', { clientX: 10 + distance, clientY: 20 }));
+
+    const event = new MouseEvent('click', { cancelable: true });
+    expect(pinningUtils.consumePinClick(event)).toBe(shouldSuppress);
+    expect(event.defaultPrevented).toBe(shouldSuppress);
+  });
+});
+
+describe('onPinPointerDown', () => {
+  test('ignores non-primary buttons', () => {
+    pinningUtils.onPinPointerDown(new PointerEvent('pointerdown', { button: 0, clientX: 1, clientY: 2 }));
+    pinningUtils.onPinPointerDown(new PointerEvent('pointerdown', { button: 2, clientX: 99, clientY: 99 }));
+    pinningUtils.beginPin({ name: 'Settings > X', link: '/x' });
+
+    expect(navigationDragState.pointerX).toBe(1);
+    expect(navigationDragState.pointerY).toBe(2);
   });
 });
 

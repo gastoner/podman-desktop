@@ -67,6 +67,7 @@ let allVisibleEntries = $derived(navigationUtils.getVisibleOrderedEntries($navig
 let visibleItemNames = $derived(
   allVisibleEntries.map(entry => navigationUtils.formatNavigationName(entry.name, entry.parentName)),
 );
+let isPinDragActive = $derived(!!navigationDragState.payload);
 
 interface DragGhostIcon {
   icon: IconType;
@@ -88,6 +89,17 @@ function resolveNavIcon(entryIcon: NavigationRegistryEntry['icon']): DragGhostIc
 
 // Ghost preview for pin-drags and internal reorder: same icon/name as the main nav row.
 let dragGhost = $derived.by((): { name: string; icon?: DragGhostIcon } | undefined => {
+  const payload = navigationDragState.payload;
+  if (payload) {
+    const found = navigationUtils.findNavigationEntryByLink($navigationRegistry, payload.link);
+    if (!found) {
+      return undefined;
+    }
+    return {
+      name: navigationUtils.formatNavigationName(found.name, found.parentName),
+      icon: resolveNavIcon(found.icon),
+    };
+  }
   if (reorderSourceIndex !== undefined) {
     const entry = allVisibleEntries[reorderSourceIndex];
     if (entry) {
@@ -100,15 +112,22 @@ let dragGhost = $derived.by((): { name: string; icon?: DragGhostIcon } | undefin
   return undefined;
 });
 
-let ghostPointerY = $derived(reorderPointerClientY - reorderPointerOffsetY);
-let ghostPointerX = $derived(navEl?.getBoundingClientRect().left ?? 0);
+let ghostPointerY = $derived(
+  (isPinDragActive ? navigationDragState.pointerY : reorderPointerClientY) -
+    (isPinDragActive ? navigationDragState.grabOffsetY : reorderPointerOffsetY),
+);
+let ghostPointerX = $derived(
+  isPinDragActive
+    ? navigationDragState.pointerX - navigationDragState.grabOffsetX
+    : (navEl?.getBoundingClientRect().left ?? 0),
+);
 
 let dropSlotIndex = $state<number | undefined>();
 let dropIndicatorOffsetY = $state(0);
 let showDropLine = $derived(
   dropSlotIndex !== undefined &&
-    reorderSourceIndex !== undefined &&
-    !navigationDropSlot.keepsItemInPlace(reorderSourceIndex, dropSlotIndex),
+    (isPinDragActive ||
+      (reorderSourceIndex !== undefined && !navigationDropSlot.keepsItemInPlace(reorderSourceIndex, dropSlotIndex))),
 );
 
 function getDropSlotAtPointerY(pointerClientY: number): DropSlot {
@@ -126,6 +145,31 @@ function updateDropTargetAtPointerY(pointerClientY: number): void {
   const dropSlot = getDropSlotAtPointerY(pointerClientY);
   dropSlotIndex = dropSlot.index;
   dropIndicatorOffsetY = dropSlot.indicatorY;
+}
+
+function placeDraggedItemInMainNavigation(): void {
+  const payload = navigationDragState.payload;
+  if (!payload || dropSlotIndex === undefined) {
+    return;
+  }
+  const registeredEntry = navigationUtils.findNavigationEntryByLink($navigationRegistry, payload.link);
+  if (!registeredEntry) {
+    navigationDragState.payload = undefined;
+    dropSlotIndex = undefined;
+    return;
+  }
+  const existingEntry = allVisibleEntries.find(entry => entry.link === payload.link);
+  const draggedItemName = navigationUtils.formatNavigationName(registeredEntry.name, registeredEntry.parentName);
+  const wasInMainNav = existingEntry !== undefined;
+  const newOrder = navigationDropSlot.insertOrMoveAtSlot(visibleItemNames, draggedItemName, dropSlotIndex);
+  setNavigationItemOrder(newOrder);
+  const newPos = newOrder.indexOf(draggedItemName) + 1;
+  const message = wasInMainNav
+    ? `Moved ${draggedItemName} to position ${newPos} of ${newOrder.length}`
+    : `Pinned ${draggedItemName} to main navigation at position ${newPos} of ${newOrder.length}`;
+  navigationDragState.announcement = message;
+  navigationDragState.payload = undefined;
+  dropSlotIndex = undefined;
 }
 
 const EDGE_SCROLL_PX = 40;
@@ -146,6 +190,14 @@ function scrollNavigationAtDragEdge(pointerClientY: number): void {
 function updateNavigationDropTarget(e: PointerEvent): void {
   scrollNavigationAtDragEdge(e.clientY);
   updateDropTargetAtPointerY(e.clientY);
+}
+
+function isPointerWithinMainNavigation(clientX: number, clientY: number): boolean {
+  if (!navEl) {
+    return false;
+  }
+  const rect = navEl.getBoundingClientRect();
+  return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
 }
 
 function onReorderPointerDown(e: PointerEvent): void {
@@ -338,8 +390,29 @@ function persistWidth(): void {
 }
 
 let scrollRegionCleanup: (() => void) | undefined;
+function onExternalDragMove(e: PointerEvent): void {
+  if (!navigationDragState.payload) {
+    return;
+  }
+  updateNavigationDropTarget(e);
+}
+
+function onExternalDragUp(e: PointerEvent): void {
+  if (!navigationDragState.payload) {
+    return;
+  }
+  if (isPointerWithinMainNavigation(e.clientX, e.clientY)) {
+    updateDropTargetAtPointerY(e.clientY);
+    placeDraggedItemInMainNavigation();
+  } else {
+    dropSlotIndex = undefined;
+  }
+}
 
 onMount(async () => {
+  window.addEventListener('pointermove', onExternalDragMove);
+  window.addEventListener('pointerup', onExternalDragUp, true);
+
   const commandRegistry = new CommandRegistry();
   commandRegistry.init();
   navWidth = (await window.getConfigurationValue<number>(NAV_BAR_WIDTH_KEY)) ?? maxWidth;
@@ -364,6 +437,8 @@ onDestroy(() => {
   window.removeEventListener('pointerup', onResizeUp);
   isDragging = false;
   scrollRegionCleanup?.();
+  window.removeEventListener('pointermove', onExternalDragMove);
+  window.removeEventListener('pointerup', onExternalDragUp, true);
   document.body.style.cursor = '';
 });
 
