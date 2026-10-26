@@ -19,7 +19,9 @@ import NavItem from './lib/ui/NavItem.svelte';
 import NavRegistryEntry from './lib/ui/NavRegistryEntry.svelte';
 import { handleNavigation } from './navigation';
 import { onDidChangeConfiguration } from './stores/configurationProperties';
-import { navigationRegistry } from './stores/navigation/navigation-registry';
+import { navigationDragState } from './stores/navigation/navigation-drag-state.svelte';
+import { NavigationDropSlot } from './stores/navigation/navigation-drop-slot';
+import { navigationRegistry, setNavigationItemOrder } from './stores/navigation/navigation-registry';
 import { NavigationUtils } from './stores/navigation/navigation-utils';
 
 interface Props {
@@ -28,6 +30,7 @@ interface Props {
 }
 let { exitSettingsCallback, meta = $bindable() }: Props = $props();
 const navigationUtils = new NavigationUtils();
+const navigationDropSlot = new NavigationDropSlot();
 
 let authActions = $state<AuthActions>();
 let outsideWindow = $state<HTMLDivElement>();
@@ -43,9 +46,52 @@ const expandedThreshold = 70;
 let navWidth = $state(160);
 let expanded = $derived(navWidth > expandedThreshold);
 let isDragging = $state(false);
+let isMac: boolean = $state(false);
+let modifierC: string = $derived(isMac ? '⌘' : 'Ctrl+');
+let reorderKeyShortcuts = $derived(isMac ? 'Meta+ArrowUp Meta+ArrowDown' : 'Control+ArrowUp Control+ArrowDown');
+
+let dragContainerEl = $state<HTMLDivElement>();
 
 // Single main-nav list sorted by index (defaults and pinned share one sequence)
 let allVisibleEntries = $derived(navigationUtils.getVisibleOrderedEntries($navigationRegistry));
+let visibleItemNames = $derived(
+  allVisibleEntries.map(entry => navigationUtils.formatNavigationName(entry.name, entry.parentName)),
+);
+
+// Commit at the requested slot (before an item, or after the last item).
+function moveNavigationItemToSlot(sourceIndex: number, dropSlotIndex: number): void {
+  const movedEntry = allVisibleEntries[sourceIndex];
+  if (!movedEntry) return;
+
+  const movedItemName = navigationUtils.formatNavigationName(movedEntry.name, movedEntry.parentName);
+  const newOrder = navigationDropSlot.insertOrMoveAtSlot(visibleItemNames, movedItemName, dropSlotIndex);
+  setNavigationItemOrder(newOrder);
+  const newPos = newOrder.indexOf(movedItemName) + 1;
+  navigationDragState.announcement = `Moved ${movedItemName} to position ${newPos} of ${newOrder.length}`;
+}
+
+// --- Keyboard reorder: modifier+Arrow to move focused nav item ---
+function onKeyDown(e: KeyboardEvent): void {
+  if (!e.ctrlKey && !e.metaKey) return;
+  if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+
+  const focused = document.activeElement as HTMLElement | null;
+  if (!focused || !dragContainerEl?.contains(focused)) return;
+
+  const itemEl = focused.closest('[data-nav-drag-item]') as HTMLElement | null;
+  if (!itemEl) return;
+
+  const items = [...dragContainerEl.querySelectorAll<HTMLElement>('[data-nav-drag-item]')];
+  const sourceIndex = items.indexOf(itemEl);
+  if (sourceIndex === -1) return;
+
+  // insert before neighbor above, or after neighbor below
+  const dropSlotIndex = e.key === 'ArrowUp' ? sourceIndex - 1 : sourceIndex + 2;
+  if (dropSlotIndex < 0 || dropSlotIndex > items.length) return;
+
+  e.preventDefault();
+  moveNavigationItemToSlot(sourceIndex, dropSlotIndex);
+}
 
 $effect(() => {
   document.documentElement.style.setProperty('--spacing-leftnavbar', `${navWidth}px`);
@@ -164,6 +210,7 @@ onMount(async () => {
   const commandRegistry = new CommandRegistry();
   commandRegistry.init();
   navWidth = (await window.getConfigurationValue<number>(NAV_BAR_WIDTH_KEY)) ?? maxWidth;
+  isMac = (await window.getOsPlatform()) === 'darwin';
   await tick();
   const el = scrollRegionEl;
   if (el) {
@@ -207,7 +254,7 @@ function onDidChangeConfigurationCallback(e: Event): void {
 }
 </script>
 
-<svelte:window />
+<svelte:window onkeydown={onKeyDown} />
 <nav
   class="group w-leftnavbar relative h-full flex-shrink-0 flex flex-col bg-[var(--pd-global-nav-bg)] border-[var(--pd-global-nav-bg-border)] border-r-[1px]"
   aria-label="AppNavigation"
@@ -236,9 +283,18 @@ function onDidChangeConfigurationCallback(e: Event): void {
       aria-label="Scrollable navigation list"
       onscroll={onScrollRegionScroll}
       onpointerdown={onScrollRegionPointerDown}>
-      {#each allVisibleEntries as entry (entry.link)}
-        <NavRegistryEntry {entry} bind:meta={meta} {expanded} />
-      {/each}
+      <div bind:this={dragContainerEl} class="flex flex-col relative" role="list">
+        {#each allVisibleEntries as entry (entry.link)}
+          <div data-nav-drag-item role="listitem">
+            <NavRegistryEntry
+              {entry}
+              bind:meta={meta}
+              {expanded}
+              aria-keyshortcuts={reorderKeyShortcuts}
+              title={`${modifierC}Arrow to move`} />
+          </div>
+        {/each}
+      </div>
     </div>
     {#if scrollThumbVisible}
       <div
@@ -303,4 +359,8 @@ function onDidChangeConfigurationCallback(e: Event): void {
     {@attach longPress(toggleNavWidth)}
     onpointerdown={onResizeHandlePointerDown}
     ondblclick={onResizeHandleDblClick}></div>
+
+  <div class="sr-only" role="status" aria-live="polite" aria-atomic="true" data-testid="nav-live-region">
+    {navigationDragState.announcement}
+  </div>
 </nav>
