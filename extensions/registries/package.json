@@ -24,6 +24,55 @@
     "test:watch": "vitest watch --coverage",
     "watch": "vite build --watch"
   },
+  "contributes": {
+    "commands": [
+      {
+        "command": "registries.onboardingDemo.start",
+        "title": "Registries: Start onboarding when-clause demo"
+      },
+      {
+        "command": "registries.onboardingDemo.runAction",
+        "title": "Registries: Run onboarding when-clause demo action"
+      }
+    ],
+    "onboarding": {
+      "title": "Onboarding when-clause demo",
+      "enablement": "true",
+      "steps": [
+        {
+          "id": "demoStartCommand",
+          "title": "Starting the demo",
+          "command": "registries.onboardingDemo.start",
+          "completionEvents": [
+            "onCommand:registries.onboardingDemo.start"
+          ]
+        },
+        {
+          "id": "demoView",
+          "title": "Content \"when\" clause demo",
+          "content": [
+            [
+              {
+                "value": "${onboardingContext:demoSummary}"
+              }
+            ],
+            [
+              {
+                "value": "This row and the button below use `when: onboardingContext:demoOutcome == pending`. Click **Run action**: the status above changes to done, and this row and the button disappear.",
+                "when": "onboardingContext:demoOutcome == pending"
+              }
+            ],
+            [
+              {
+                "value": ":button[Run action]{command=registries.onboardingDemo.runAction}",
+                "when": "onboardingContext:demoOutcome == pending"
+              }
+            ]
+          ]
+        }
+      ]
+    }
+  },
   "dependencies": {
     "@podman-desktop/api": "workspace:*"
   },

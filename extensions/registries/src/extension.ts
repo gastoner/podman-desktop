@@ -31,6 +31,22 @@ export async function activate(extensionContext: extensionApi.ExtensionContext):
     const disposable = extensionApi.registry.suggestRegistry(registry);
     extensionContext.subscriptions.push(disposable);
   }
+
+  // DEMO ONLY (do not merge): commands used by the onboarding when-clause demo in package.json
+  extensionContext.subscriptions.push(
+    extensionApi.commands.registerCommand('registries.onboardingDemo.start', () => {
+      extensionApi.context.setValue('demoSummary', 'Status: pending', 'onboarding');
+      extensionApi.context.setValue('demoOutcome', 'pending', 'onboarding');
+    }),
+    extensionApi.commands.registerCommand('registries.onboardingDemo.runAction', () => {
+      extensionApi.context.setValue(
+        'demoSummary',
+        'Status: done. The row and button below should be gone.',
+        'onboarding',
+      );
+      extensionApi.context.setValue('demoOutcome', 'done', 'onboarding');
+    }),
+  );
 }
 
 export function deactivate(): void {
