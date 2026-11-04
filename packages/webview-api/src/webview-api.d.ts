@@ -29,9 +29,44 @@
  **/
 
 declare module '@podman-desktop/webview-api' {
+  /** An object that can be disposed to release resources. */
+  export interface Disposable {
+    dispose(): void;
+  }
+
+  /**
+   * Dependency-free structural type of a FontAwesome icon definition, including its glyph data.
+   * `IconDefinition` from `@fortawesome/fontawesome-common-types` satisfies it.
+   */
+  export interface PinnableNavigationIcon {
+    readonly prefix: string;
+    readonly iconName: string;
+    readonly icon: readonly unknown[];
+  }
+
+  /** A navigation item contributed by an extension webview that can be pinned to the main navigation. */
+  export interface PinnableNavigationItem {
+    /** Displayed title of the item, e.g. "Recipe Catalog". */
+    title: string;
+    /** Internal href of the item inside the webview, e.g. "/recipes". */
+    href: string;
+    /** Optional icon: an image path or a FontAwesome icon definition. */
+    icon?: string | PinnableNavigationIcon;
+  }
+
   export interface WebviewApi {
     getState(): unknown;
     postMessage(msg: unknown): void;
     setState(newState: unknown): Promise<void>;
+    /**
+     * Show the Podman Desktop Pin/Unpin context menu for a navigation item of the extension.
+     * Inert when called outside of a Podman Desktop webview.
+     */
+    showNavigationItemMenu(item: PinnableNavigationItem): Promise<void>;
+    /**
+     * Register a listener invoked when the shell navigates this webview to a pinned
+     * navigation item. The listener receives the internal path (the item's href) to route to.
+     */
+    onDidNavigateToPinnedItem(listener: (path: string) => void): Disposable;
   }
 }

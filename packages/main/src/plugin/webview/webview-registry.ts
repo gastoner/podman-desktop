@@ -1,5 +1,5 @@
 /**********************************************************************
- * Copyright (C) 2024 Red Hat, Inc.
+ * Copyright (C) 2024-2026 Red Hat, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -326,6 +326,7 @@ export class WebviewRegistry {
 
       return {
         id,
+        extensionId: webviewPanelImpl.webview.extensionInfo.id,
         viewType,
         sourcePath,
         html,

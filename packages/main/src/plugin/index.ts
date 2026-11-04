@@ -261,6 +261,7 @@ import { getFreePort, getFreePortRange, isFreePort } from './util/port.js';
 import { TaskConnectionUtils } from './util/task-connection-utils.js';
 import { ViewRegistry } from './view-registry.js';
 import { DevToolsManager } from './webview/devtools-manager.js';
+import { PinnedExtensionLinks } from './webview/pinned-extension-links.js';
 import { WebviewRegistry } from './webview/webview-registry.js';
 import { WelcomeInit } from './welcome/welcome-init.js';
 
@@ -821,6 +822,11 @@ export class PluginSystem {
 
     const webviewRegistry = container.get<WebviewRegistry>(WebviewRegistry);
     await webviewRegistry.start();
+
+    // handle pinning of extension webview navigation items to the main navigation bar
+    container.bind<PinnedExtensionLinks>(PinnedExtensionLinks).toSelf().inSingletonScope();
+    const pinnedExtensionLinks = container.get<PinnedExtensionLinks>(PinnedExtensionLinks);
+    pinnedExtensionLinks.init();
 
     container.bind<PromiseWithResolvers<BrowserWindow>>(MainWindowDeferred).toConstantValue(this.mainWindowDeferred);
     container.bind<DialogRegistry>(DialogRegistry).toSelf().inSingletonScope();
@@ -2523,7 +2529,9 @@ export class PluginSystem {
     this.ipcHandle(
       'extension-loader:removeExtension',
       async (_listener: Electron.IpcMainInvokeEvent, extensionId: string): Promise<void> => {
-        return this.extensionLoader.removeExtensionPerUserRequest(extensionId);
+        await this.extensionLoader.removeExtensionPerUserRequest(extensionId);
+        // only an uninstall drops the pinned items: an update removes the extension transiently
+        await pinnedExtensionLinks.removeExtensionLinks(extensionId);
       },
     );
 

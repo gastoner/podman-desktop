@@ -1,5 +1,5 @@
 /**********************************************************************
- * Copyright (C) 2024 Red Hat, Inc.
+ * Copyright (C) 2024-2026 Red Hat, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,14 +16,24 @@
  * SPDX-License-Identifier: Apache-2.0
  ***********************************************************************/
 
-import { type ContributionInfo, type GoToInfo, NavigationPage, type WebviewInfo } from '@desktop-framework/api';
+import {
+  type ContributionInfo,
+  type GoToInfo,
+  NavigationPage,
+  type PinnedExtensionLink,
+  type WebviewInfo,
+} from '@desktop-framework/api';
 import { faPuzzlePiece } from '@fortawesome/free-solid-svg-icons';
 
 import ExtensionIcon from '/@/lib/images/ExtensionIcon.svelte';
+import { configurationProperties } from '/@/stores/configurationProperties';
 import { contributions } from '/@/stores/contribs';
 import { webviews } from '/@/stores/webviews';
 
 import type { NavigationRegistryEntry } from './navigation-registry';
+import { NavigationUtils } from './navigation-utils';
+
+const navigationUtils = new NavigationUtils();
 
 export function createNavigationExtensionEntry(): NavigationRegistryEntry {
   const registry: NavigationRegistryEntry = {
@@ -44,6 +54,12 @@ let extensionNavigationGroupItems: NavigationRegistryEntry[] = $state([]);
 
 let webviewDestinations = $state<GoToInfo[]>([]);
 let contribDestinations = $state<GoToInfo[]>([]);
+
+// pinned extension navigation items, from the navbar.pinnedLinks configuration
+let pinnedLinks: PinnedExtensionLink[] = [];
+// current navbar configuration, used to compute the visibility of the pinned items
+let navbarItemOrder: string[] = [];
+let navbarDisabledItems: string[] = [];
 
 export function createNavigationExtensionGroup(): NavigationRegistryEntry {
   const mainGroupEntry: NavigationRegistryEntry = {
@@ -68,6 +84,11 @@ export function createNavigationExtensionGroup(): NavigationRegistryEntry {
 
   const refresh = (): void => {
     const newItems: NavigationRegistryEntry[] = [];
+
+    // append an entry for each pinned extension navigation item
+    for (const link of pinnedLinks) {
+      newItems.push(createPinnedLinkEntry(link, allWebviews));
+    }
 
     contribDestinations = allContribs.map(contrib => {
       const registry: NavigationRegistryEntry = {
@@ -127,5 +148,68 @@ export function createNavigationExtensionGroup(): NavigationRegistryEntry {
     refresh();
   });
 
+  // re-read the pinned links and the navbar configuration on each configuration change
+  configurationProperties.subscribe(() => {
+    if (!window.getConfigurationValue) {
+      return;
+    }
+    Promise.all([
+      window.getConfigurationValue<PinnedExtensionLink[]>('navbar.pinnedLinks'),
+      window.getConfigurationValue<string[]>('navbar.itemOrder'),
+      window.getConfigurationValue<string[]>('navbar.disabledItems'),
+    ])
+      .then(([links, itemOrder, disabledItems]) => {
+        pinnedLinks = links ?? [];
+        navbarItemOrder = itemOrder ?? [];
+        navbarDisabledItems = disabledItems ?? [];
+        refresh();
+      })
+      .catch((err: unknown) => console.error('Error getting the pinned navigation links configuration', err));
+  });
+
   return mainGroupEntry;
+}
+
+// create a main navigation entry for a pinned extension item: it is a child of its webview
+// entry, so it is only visible when its order key is part of the navbar order
+function createPinnedLinkEntry(link: PinnedExtensionLink, allWebviews: WebviewInfo[]): NavigationRegistryEntry {
+  const webview = allWebviews.find(
+    webview => webview.extensionId === link.extensionId && webview.viewType === link.viewType,
+  );
+  const parentName = webview?.name ?? link.webviewName;
+  const orderKey = navigationUtils.formatNavigationName(link.title, parentName);
+  const orderIndex = navbarItemOrder.indexOf(orderKey);
+  const index = orderIndex === -1 ? undefined : orderIndex;
+
+  return {
+    name: link.title,
+    parentName,
+    icon: createPinnedLinkIcon(link.icon, webview),
+    // without webview, open the extension details; the query keeps the link unique as the navigation is keyed by link
+    link: webview
+      ? `/webviews/${webview.id}${link.path}`
+      : `/extensions/details/${link.extensionId}?pinned=${encodeURIComponent(link.path)}`,
+    tooltip: link.title,
+    type: 'entry',
+    destinations: [],
+    counter: 0,
+    index,
+    hidden: navbarDisabledItems.includes(orderKey) || index === undefined,
+  };
+}
+
+function createPinnedLinkIcon(
+  icon: PinnedExtensionLink['icon'],
+  webview: WebviewInfo | undefined,
+): NavigationRegistryEntry['icon'] {
+  if (typeof icon === 'string') {
+    return { iconImage: icon };
+  }
+  if (icon) {
+    return { faIcon: { definition: icon, size: 'lg' } };
+  }
+  if (webview?.icon) {
+    return { iconImage: webview.icon };
+  }
+  return { faIcon: { definition: faPuzzlePiece, size: 'lg' } };
 }

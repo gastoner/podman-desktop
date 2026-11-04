@@ -1,6 +1,7 @@
 <script lang="ts">
 import type { WebviewInfo } from '@desktop-framework/api';
 import { onDestroy } from 'svelte';
+import { router } from 'tinro';
 
 import Route from '/@/Route.svelte';
 import { webviews } from '/@/stores/webviews';
@@ -27,6 +28,59 @@ let webviewInfo: WebviewInfo | undefined = $derived($webviews.find(webview => we
 
 // reactive options for webview lifecycle directive - updates when webviewInfo changes
 let lifecycleOptions = $derived({ webviewInfo });
+
+// internal path of the webview, from the shell route (/webviews/<id>/<path>)
+let lastWebviewPath: string | undefined = undefined;
+// id of the webview whose guest finished loading: the same element hosts a new guest when the id changes
+let readyWebviewId: string | undefined = undefined;
+
+// forward the internal path to the guest, so a click on a pinned navigation item routes the webview
+function sendPathToGuest(): void {
+  if (
+    lastWebviewPath !== undefined &&
+    readyWebviewId === id &&
+    webviewElement &&
+    'send' in webviewElement &&
+    typeof webviewElement.send === 'function'
+  ) {
+    webviewElement.send('webview-navigate-to', lastWebviewPath);
+  }
+}
+
+// the router store emits a new route object on every navigation, even to the same URL,
+// so clicking a pinned item again re-routes the webview
+$effect(() => {
+  const route = $router;
+  const prefix = `/webviews/${id}`;
+  if (!route.path.startsWith(prefix)) {
+    return;
+  }
+  const path = route.path.slice(prefix.length);
+  // no path: plain navigation to the webview entry, keep the guest's internal route
+  lastWebviewPath = path === '' ? undefined : path;
+  sendPathToGuest();
+});
+
+function onWebviewDomReady(): void {
+  // only the first dom-ready of a guest replays the pending path: a reloaded guest keeps its own route
+  if (readyWebviewId === id) {
+    return;
+  }
+  readyWebviewId = id;
+  sendPathToGuest();
+}
+
+$effect(() => {
+  const element = webviewElement;
+  if (!element) {
+    return;
+  }
+  readyWebviewId = undefined;
+  element.addEventListener('dom-ready', onWebviewDomReady);
+  return (): void => {
+    element.removeEventListener('dom-ready', onWebviewDomReady);
+  };
+});
 
 $effect(() => {
   if (webviewInfo) {

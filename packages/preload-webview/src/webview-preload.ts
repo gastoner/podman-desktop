@@ -18,7 +18,7 @@
 
 import type { ColorInfo, ThemeInfo, WebviewInfo } from '@desktop-framework/api';
 import { AppearanceSettings } from '@desktop-framework/api/appearance';
-import type { WebviewApi } from '@podman-desktop/webview-api';
+import type { Disposable, PinnableNavigationItem, WebviewApi } from '@podman-desktop/webview-api';
 import type { IpcRendererEvent } from 'electron';
 import { contextBridge, ipcRenderer } from 'electron';
 
@@ -34,6 +34,8 @@ export class WebviewPreload {
   #domLoaded: boolean = false;
   #acquiredApi: boolean = false;
   #cssStyleElement: HTMLStyleElement | undefined;
+  #pinnedPathListeners: Set<(path: string) => void> = new Set();
+  #pendingPinnedPath: string | undefined;
 
   constructor(webviewId: string) {
     this.#webviewId = webviewId;
@@ -155,7 +157,48 @@ export class WebviewPreload {
           console.error('Error while updating the state', error);
         });
       },
+      showNavigationItemMenu: (item: PinnableNavigationItem): Promise<void> => {
+        return this.showNavigationItemMenu(item);
+      },
+      onDidNavigateToPinnedItem: (listener: (path: string) => void): Disposable => {
+        return this.onDidNavigateToPinnedItem(listener);
+      },
     });
+  }
+
+  protected async showNavigationItemMenu(item: PinnableNavigationItem): Promise<void> {
+    await this.ipcInvoke('webviewRegistry:showNavigationItemMenu', this.#webviewInfo?.id, item);
+  }
+
+  protected onDidNavigateToPinnedItem(listener: (path: string) => void): Disposable {
+    this.#pinnedPathListeners.add(listener);
+    // replay the path received before the listener registered
+    const pendingPath = this.#pendingPinnedPath;
+    if (pendingPath !== undefined) {
+      this.#pendingPinnedPath = undefined;
+      listener(pendingPath);
+    }
+    return {
+      dispose: (): void => {
+        this.#pinnedPathListeners.delete(listener);
+      },
+    };
+  }
+
+  protected dispatchPinnedPath(path: string): void {
+    if (this.#pinnedPathListeners.size === 0) {
+      // no listener yet: hold the last path so it can be replayed later
+      this.#pendingPinnedPath = path;
+      return;
+    }
+    // a failing extension listener must not prevent the other listeners from being notified
+    for (const listener of this.#pinnedPathListeners) {
+      try {
+        listener(path);
+      } catch (error: unknown) {
+        console.error('Error in a pinned navigation item listener', error);
+      }
+    }
   }
 
   protected getTheme(): Promise<string> {
@@ -204,6 +247,13 @@ export class WebviewPreload {
       if (this.#webviewInfo) {
         this.#webviewInfo.html = html as string;
         this.changeContent();
+      }
+    });
+
+    // navigate the webview to a pinned navigation item requested by the shell
+    this.ipcRendererOn('webview-navigate-to', (_, path) => {
+      if (typeof path === 'string') {
+        this.dispatchPinnedPath(path);
       }
     });
   }

@@ -59,6 +59,7 @@ class TestWebwiewPreload extends WebviewPreload {
 
 const webviewInfo: WebviewInfo = {
   id: '123',
+  extensionId: 'testExtension',
   viewType: 'test',
   sourcePath: 'testPath',
   icon: 'testIcon',
@@ -132,9 +133,10 @@ test('check init method', async () => {
     expect.any(Function),
   );
 
-  // check we register 2 event listener on ipcRenderer
+  // check we register 3 event listener on ipcRenderer
   expect(spyIpcRendererOn).toHaveBeenCalledWith('webview-post-message', expect.any(Function));
   expect(spyIpcRendererOn).toHaveBeenCalledWith('webview-update-html', expect.any(Function));
+  expect(spyIpcRendererOn).toHaveBeenCalledWith('webview-navigate-to', expect.any(Function));
 });
 
 describe('ipcInvoke', () => {
@@ -328,4 +330,89 @@ test('check buildApi', async () => {
 
   // check ipcInvoke has been called
   expect(spyIpcInvoke).toHaveBeenCalledWith('webviewRegistry:update-state', webviewInfo.id, newFakeState);
+});
+
+test('check showNavigationItemMenu', async () => {
+  // spy ipcInvoke
+  const spyIpcInvoke = vi.spyOn(webviewPreload, 'ipcInvoke');
+  spyIpcInvoke.mockResolvedValue(undefined);
+
+  // remove spy on buildApi
+  spyBuildApi.mockRestore();
+
+  // mock the contextBridge to grab the api object
+  let webviewApi: WebviewApi | undefined = undefined;
+  vi.mocked(contextBridge.exposeInMainWorld).mockImplementation((name: string, api: () => WebviewApi) => {
+    webviewApi = api();
+  });
+
+  // init to set the webviewInfo
+  await webviewPreload.init();
+
+  if (!webviewApi) {
+    throw new Error('webviewApi should be defined');
+  }
+  const podmanDesktopWebviewApi: WebviewApi = webviewApi;
+
+  await podmanDesktopWebviewApi.showNavigationItemMenu({ title: 'Recipes', href: '/recipes' });
+
+  // the menu request is forwarded to the main process with the webview id
+  expect(spyIpcInvoke).toHaveBeenCalledWith('webviewRegistry:showNavigationItemMenu', '123', {
+    title: 'Recipes',
+    href: '/recipes',
+  });
+});
+
+test('check onDidNavigateToPinnedItem dispatches and replays the pending path', async () => {
+  // use the real ipcRendererOn so the listeners are registered on the mocked ipcRenderer
+  spyIpcRendererOn.mockRestore();
+
+  // remove spy on buildApi
+  spyBuildApi.mockRestore();
+
+  // mock the contextBridge to grab the api object
+  let webviewApi: WebviewApi | undefined = undefined;
+  vi.mocked(contextBridge.exposeInMainWorld).mockImplementation((name: string, api: () => WebviewApi) => {
+    webviewApi = api();
+  });
+
+  // init to set the webviewInfo
+  await webviewPreload.init();
+
+  if (!webviewApi) {
+    throw new Error('webviewApi should be defined');
+  }
+  const podmanDesktopWebviewApi: WebviewApi = webviewApi;
+
+  // grab the webview-navigate-to listener registered by init
+  const navigateCall = vi.mocked(ipcRenderer.on).mock.calls.find(([channel]) => channel === 'webview-navigate-to');
+  const navigateListener = navigateCall?.[1] as (event: IpcRendererEvent, path: string) => void;
+
+  // a path received before any listener registers is held
+  navigateListener({} as IpcRendererEvent, '/recipes');
+
+  const receivedPaths: string[] = [];
+  const disposable = podmanDesktopWebviewApi.onDidNavigateToPinnedItem(path => receivedPaths.push(path));
+
+  // the pending path is replayed when the first listener registers
+  expect(receivedPaths).toStrictEqual(['/recipes']);
+
+  // a failing listener does not prevent the other listeners from being notified
+  const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+  const failingDisposable = podmanDesktopWebviewApi.onDidNavigateToPinnedItem(() => {
+    throw new Error('listener failure');
+  });
+  const lastDisposable = podmanDesktopWebviewApi.onDidNavigateToPinnedItem(path => receivedPaths.push(`last:${path}`));
+
+  // subsequent paths are dispatched directly
+  navigateListener({} as IpcRendererEvent, '/models');
+  expect(receivedPaths).toStrictEqual(['/recipes', '/models', 'last:/models']);
+  expect(consoleErrorSpy).toHaveBeenCalledWith('Error in a pinned navigation item listener', expect.any(Error));
+  failingDisposable.dispose();
+  lastDisposable.dispose();
+
+  // after disposal the listener is no longer notified
+  disposable.dispose();
+  navigateListener({} as IpcRendererEvent, '/catalog');
+  expect(receivedPaths).toStrictEqual(['/recipes', '/models', 'last:/models']);
 });

@@ -1,5 +1,5 @@
 /**********************************************************************
- * Copyright (C) 2023 Red Hat, Inc.
+ * Copyright (C) 2023-2026 Red Hat, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,7 @@ import '@testing-library/jest-dom/vitest';
 import type { WebviewInfo } from '@desktop-framework/api';
 import { render, screen } from '@testing-library/svelte';
 import { tick } from 'svelte';
+import { router } from 'tinro';
 import { beforeEach, expect, test, vi } from 'vitest';
 
 import { webviews } from '/@/stores/webviews';
@@ -36,6 +37,7 @@ const webviewTestList: WebviewInfo[] = [
   {
     id: 'webviewId1',
     uuid: 'uuid1',
+    extensionId: 'podman-desktop',
     viewType: 'podman-desktop',
     sourcePath: '/path/to/source',
     icon: 'icon1',
@@ -46,6 +48,7 @@ const webviewTestList: WebviewInfo[] = [
   {
     id: 'webviewId2',
     uuid: 'uuid2',
+    extensionId: 'podman-desktop',
     viewType: 'podman-desktop',
     sourcePath: '/path/to/source',
     icon: 'icon2',
@@ -158,4 +161,83 @@ test('check open devtools', async () => {
 
   //  check if send method has been called
   expect(openDevtoolsMock).toHaveBeenCalled();
+});
+
+test('check pinned navigation path is forwarded to the webview', async () => {
+  router.goto('/');
+  await waitRender({ id: webviewTestList[0].id });
+
+  const webview = screen.getByRole('document', { name: 'Webview Podman Desktop1' });
+  const sendToWebviewMock = vi.fn();
+  (webview as any).send = sendToWebviewMock;
+
+  // the path is kept while the guest webview is still loading
+  router.goto(`/webviews/${webviewTestList[0].id}/recipes`);
+  await tick();
+  expect(sendToWebviewMock).not.toHaveBeenCalled();
+
+  // once the guest content is ready the pending path is forwarded
+  webview.dispatchEvent(new Event('dom-ready'));
+  await tick();
+  expect(sendToWebviewMock).toHaveBeenCalledTimes(1);
+  expect(sendToWebviewMock).toHaveBeenCalledWith('webview-navigate-to', '/recipes');
+
+  // a reloaded guest keeps its own route: the path is not sent again
+  webview.dispatchEvent(new Event('dom-ready'));
+  await tick();
+  expect(sendToWebviewMock).toHaveBeenCalledTimes(1);
+
+  // navigating to another path is forwarded directly
+  router.goto(`/webviews/${webviewTestList[0].id}/models`);
+  await tick();
+  expect(sendToWebviewMock).toHaveBeenLastCalledWith('webview-navigate-to', '/models');
+
+  // clicking the pinned item again re-routes the webview, even on the same path
+  router.goto(`/webviews/${webviewTestList[0].id}/models`);
+  await tick();
+  expect(sendToWebviewMock).toHaveBeenCalledTimes(3);
+});
+
+test('check plain webview navigation keeps the guest route', async () => {
+  router.goto('/');
+  await waitRender({ id: webviewTestList[0].id });
+
+  const webview = screen.getByRole('document', { name: 'Webview Podman Desktop1' });
+  const sendToWebviewMock = vi.fn();
+  (webview as any).send = sendToWebviewMock;
+
+  webview.dispatchEvent(new Event('dom-ready'));
+  await tick();
+
+  router.goto(`/webviews/${webviewTestList[0].id}`);
+  await tick();
+
+  expect(sendToWebviewMock).not.toHaveBeenCalled();
+});
+
+test('check pinned navigation path is replayed to the guest of another webview', async () => {
+  router.goto('/');
+  const { rerender } = render(Webview, { id: webviewTestList[0].id });
+  await tick();
+  await tick();
+  await tick();
+  const webview = screen.getByRole('document', { name: 'Webview Podman Desktop1' });
+  const sendToWebviewMock = vi.fn();
+  (webview as any).send = sendToWebviewMock;
+  webview.dispatchEvent(new Event('dom-ready'));
+
+  router.goto(`/webviews/${webviewTestList[0].id}/recipes`);
+  await tick();
+  expect(sendToWebviewMock).toHaveBeenCalledTimes(1);
+
+  // the same element loads the guest of another webview: wait for it before sending
+  await rerender({ id: webviewTestList[1].id });
+  router.goto(`/webviews/${webviewTestList[1].id}/models`);
+  await tick();
+  expect(sendToWebviewMock).toHaveBeenCalledTimes(1);
+
+  webview.dispatchEvent(new Event('dom-ready'));
+  await tick();
+  expect(sendToWebviewMock).toHaveBeenCalledTimes(2);
+  expect(sendToWebviewMock).toHaveBeenLastCalledWith('webview-navigate-to', '/models');
 });

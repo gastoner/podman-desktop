@@ -1,5 +1,5 @@
 /**********************************************************************
- * Copyright (C) 2024 Red Hat, Inc.
+ * Copyright (C) 2024-2026 Red Hat, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,7 +40,7 @@ test('should register a configuration', async () => {
   expect(configurationNode?.id).toBe('preferences.navBar');
   expect(configurationNode?.title).toBe('User Confirmation');
   expect(configurationNode?.properties).toBeDefined();
-  expect(Object.keys(configurationNode?.properties ?? {}).length).toBe(2);
+  expect(Object.keys(configurationNode?.properties ?? {}).length).toBe(3);
   expect(configurationNode?.properties?.['navbar.disabledItems']).toBeDefined();
   expect(configurationNode?.properties?.['navbar.disabledItems']?.description).toBe(
     'Items being disabled in the navigation bar',
@@ -54,4 +54,12 @@ test('should register a configuration', async () => {
   );
   expect(configurationNode?.properties?.['navbar.itemOrder']?.type).toStrictEqual(['array']);
   expect(configurationNode?.properties?.['navbar.itemOrder']?.default).toStrictEqual([]);
+
+  expect(configurationNode?.properties?.['navbar.pinnedLinks']).toBeDefined();
+  expect(configurationNode?.properties?.['navbar.pinnedLinks']?.description).toBe(
+    'Extension navigation items pinned to the navigation bar',
+  );
+  expect(configurationNode?.properties?.['navbar.pinnedLinks']?.type).toStrictEqual(['array']);
+  expect(configurationNode?.properties?.['navbar.pinnedLinks']?.default).toStrictEqual([]);
+  expect(configurationNode?.properties?.['navbar.pinnedLinks']?.hidden).toBe(true);
 });

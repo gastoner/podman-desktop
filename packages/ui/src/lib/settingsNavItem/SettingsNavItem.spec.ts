@@ -1,5 +1,5 @@
 /**********************************************************************
- * Copyright (C) 2024 Red Hat, Inc.
+ * Copyright (C) 2024-2026 Red Hat, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ import '@testing-library/jest-dom/vitest';
 
 import { faBookOpen } from '@fortawesome/free-solid-svg-icons';
 import { fireEvent, render, screen } from '@testing-library/svelte';
-import { beforeAll, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, test, vi } from 'vitest';
 
 import MyIcon from './IconTest.svelte';
 import SettingsNavItem from './SettingsNavItem.svelte';
@@ -245,5 +245,87 @@ describe('iconRight', () => {
     expect(svgs).toHaveLength(1);
     // Icon should be in the fixed-width end gutter container.
     expect(svgs[0].parentElement).toHaveClass('w-3');
+  });
+});
+
+describe('pinnable', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function contextClick(element: Element): MouseEvent {
+    const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+    element.dispatchEvent(event);
+    return event;
+  }
+
+  function stubWebviewApi(showNavigationItemMenu: ReturnType<typeof vi.fn>): void {
+    vi.stubGlobal('acquirePodmanDesktopApi', (): { showNavigationItemMenu: typeof showNavigationItemMenu } => ({
+      showNavigationItemMenu,
+    }));
+  }
+
+  test('right-click on a pinnable item requests the navigation pin menu', () => {
+    const showNavigationItemMenu = vi.fn().mockResolvedValue(undefined);
+    stubWebviewApi(showNavigationItemMenu);
+
+    render(SettingsNavItem, {
+      title: 'Recipes',
+      href: '/recipes',
+      pinnable: true,
+      icon: faBookOpen,
+    });
+
+    const event = contextClick(screen.getByRole('link', { name: 'Recipes' }));
+
+    // the browser context menu is replaced by the Podman Desktop pin menu
+    expect(event.defaultPrevented).toBe(true);
+    expect(showNavigationItemMenu).toHaveBeenCalledWith({ title: 'Recipes', href: '/recipes', icon: faBookOpen });
+  });
+
+  test('component icons are not forwarded to the pin menu', () => {
+    const showNavigationItemMenu = vi.fn().mockResolvedValue(undefined);
+    stubWebviewApi(showNavigationItemMenu);
+
+    render(SettingsNavItem, {
+      title: 'Recipes',
+      href: '/recipes',
+      pinnable: true,
+      icon: MyIcon,
+    });
+
+    contextClick(screen.getByRole('link', { name: 'Recipes' }));
+
+    expect(showNavigationItemMenu).toHaveBeenCalledWith({ title: 'Recipes', href: '/recipes' });
+  });
+
+  test('right-click does not request the menu when the item is not pinnable', () => {
+    const showNavigationItemMenu = vi.fn().mockResolvedValue(undefined);
+    stubWebviewApi(showNavigationItemMenu);
+
+    render(SettingsNavItem, {
+      title: 'Recipes',
+      href: '/recipes',
+      icon: faBookOpen,
+    });
+
+    const event = contextClick(screen.getByRole('link', { name: 'Recipes' }));
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(showNavigationItemMenu).not.toHaveBeenCalled();
+  });
+
+  test('right-click is inert outside of a webview', () => {
+    // no Podman Desktop api is exposed outside of extension webviews
+    render(SettingsNavItem, {
+      title: 'Recipes',
+      href: '/recipes',
+      pinnable: true,
+      icon: faBookOpen,
+    });
+
+    const event = contextClick(screen.getByRole('link', { name: 'Recipes' }));
+
+    expect(event.defaultPrevented).toBe(false);
   });
 });

@@ -73,6 +73,48 @@ panel.webview.onDidReceiveMessage((message: unknown) => {
 
 The frontend posts messages back with `acquirePodmanDesktopApi().postMessage()`, which is exposed to the webview content and internally uses the same `postMessage` mechanism.
 
+## Pinning webview navigation items to the main navigation
+
+Webviews that render their own side navigation with the `SettingsNavItem` component from `@podman-desktop/ui-svelte` can let users pin individual entries to the Podman Desktop main navigation. Set the `pinnable` prop on the entries to pin:
+
+```svelte
+<script lang="ts">
+  import { SettingsNavItem } from '@podman-desktop/ui-svelte';
+  import { faBookOpen } from '@fortawesome/free-solid-svg-icons';
+</script>
+
+<SettingsNavItem
+  title="Recipes"
+  icon={faBookOpen}
+  href="/recipes"
+  selected={url === '/recipes'}
+  pinnable />
+```
+
+Right-clicking a pinnable entry opens a context menu with a _Pin Recipes to Navigation_ action, or _Unpin Recipes_ once pinned. A pinned entry appears in the main navigation labeled `<webview name> > <title>`, and can be reordered and unpinned like any other pinned navigation item. Uninstalling the extension removes its pinned entries. Outside of a Podman Desktop webview the `pinnable` prop is inert and the browser's default context menu is kept.
+
+The `icon` is optional. A FontAwesome icon definition or an image path string is reused for the pinned entry; icons defined as Svelte components cannot be serialized, and the pinned entry falls back to the extension icon.
+
+### Navigating when a pinned entry is opened
+
+When the user clicks a pinned entry, Podman Desktop opens the webview and notifies it of the entry's path. Subscribe with `onDidNavigateToPinnedItem` in the frontend and route to the received path:
+
+```typescript
+const disposable = acquirePodmanDesktopApi().onDidNavigateToPinnedItem(path => {
+  router.goto(path);
+});
+```
+
+A click made while the webview is still loading is not lost: the pending path is replayed when the listener registers, so the subscription can live in the application root.
+
+> **_NOTE:_** Use stable `href` values. They are persisted in the local configuration and restored on startup. A path that no longer exists in the webview is routed anyway and is up to the frontend router to handle.
+
+Limitations:
+
+- Dragging an entry from inside the webview onto the main navigation is not supported; pinning goes through the context menu.
+- When several webview panels share the same `viewType`, a pinned entry opens the first one.
+- If the extension is installed but its webview is not running, clicking a pinned entry opens the extension's details page instead.
+
 ## Verification
 
 1. Build and load your extension, and open its dashboard panel.

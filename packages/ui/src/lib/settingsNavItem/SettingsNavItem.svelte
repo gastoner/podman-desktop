@@ -13,6 +13,7 @@ interface Props {
   expanded?: boolean;
   child?: boolean;
   selected?: boolean;
+  pinnable?: boolean;
   icon?: IconDefinition | Component | string;
   iconRight?: IconDefinition | Component | string;
   iconRightAlign?: 'inline' | 'end';
@@ -28,6 +29,7 @@ let {
   expanded = $bindable(),
   child = false,
   selected = false,
+  pinnable = false,
   icon = undefined,
   iconRight = undefined,
   iconRightAlign = 'end',
@@ -44,6 +46,32 @@ function click(): void {
   expanded = !expanded;
   onClick();
 }
+
+interface PodmanDesktopWebviewApi {
+  showNavigationItemMenu?: (item: { title: string; href: string; icon?: string | IconDefinition }) => Promise<void>;
+}
+
+// Svelte components cannot be serialized: only strings and FontAwesome definitions are sent
+function serializeNavigationIcon(): string | IconDefinition | undefined {
+  return typeof icon === 'string' || typeof icon === 'object' ? icon : undefined;
+}
+
+// right-click on a pinnable item shows the Podman Desktop Pin/Unpin menu; inert outside of a webview
+function onContextMenu(event: MouseEvent): void {
+  if (!pinnable) {
+    return;
+  }
+  const podmanDesktopApi = (
+    window as { acquirePodmanDesktopApi?: () => PodmanDesktopWebviewApi }
+  ).acquirePodmanDesktopApi?.();
+  if (!podmanDesktopApi?.showNavigationItemMenu) {
+    return;
+  }
+  event.preventDefault();
+  podmanDesktopApi
+    .showNavigationItemMenu({ title, href, icon: serializeNavigationIcon() })
+    .catch((error: unknown) => console.error('Error while showing the navigation item menu', error));
+}
 </script>
 
 <a
@@ -53,7 +81,8 @@ function click(): void {
   title={title}
   aria-keyshortcuts={sanitizedKeyShortcuts}
   onclick={click}
-  onkeydown={onKeyDown}>
+  onkeydown={onKeyDown}
+  oncontextmenu={onContextMenu}>
   <div
     data-settings-nav-row
     class="flex box-border w-full py-2 items-center cursor-pointer border-l-[4px]"

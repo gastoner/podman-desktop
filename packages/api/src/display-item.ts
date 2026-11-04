@@ -16,6 +16,8 @@
  * SPDX-License-Identifier: Apache-2.0
  ***********************************************************************/
 
+import type { IconDefinition } from '@fortawesome/free-solid-svg-icons';
+
 export interface DisplayItem {
   name: string;
   visible: boolean;
@@ -30,4 +32,29 @@ export interface DragPayload {
   /** Prefixed display name, e.g. "Settings > Resources" or "Kubernetes > Nodes". */
   name: string;
   link: string;
+}
+
+/** A navigation item contributed by an extension webview that can be pinned to the main navigation. */
+export interface PinnableNavigationItem {
+  /** Displayed title of the item, e.g. "Recipe Catalog". */
+  title: string;
+  /** Internal href of the item inside the webview, e.g. "/recipes". */
+  href: string;
+  /** Optional icon: an image path or a FontAwesome icon definition. */
+  icon?: string | IconDefinition;
+}
+
+/** Persisted metadata of an extension navigation item pinned to the main navigation. */
+export interface PinnedExtensionLink {
+  extensionId: string;
+  /** Webview view type the item belongs to. */
+  viewType: string;
+  /** Webview name when the item was pinned; used to derive the navigation order key. */
+  webviewName: string;
+  /** Internal href of the item inside the webview, e.g. "/recipes". */
+  path: string;
+  /** Displayed title of the item, e.g. "Recipe Catalog". */
+  title: string;
+  /** Optional icon: an image path or a FontAwesome icon definition, captured at pin time. */
+  icon?: string | IconDefinition;
 }

@@ -41,6 +41,12 @@ export class NavigationItemsInit {
           default: [],
           hidden: true,
         },
+        ['navbar.pinnedLinks']: {
+          description: 'Extension navigation items pinned to the navigation bar',
+          type: ['array'],
+          default: [],
+          hidden: true,
+        },
       },
     };
 
